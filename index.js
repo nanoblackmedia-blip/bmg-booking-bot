@@ -7,6 +7,7 @@ const app = express();
 app.use(express.json());
 
 const WA_API = `https://graph.facebook.com/v19.0/${process.env.WA_PHONE_NUMBER_ID}/messages`;
+
 // ─── Google Sheets ────────────────────────────────────────────────────────────
 async function appendToSheet(bookingId, data, phone) {
   try {
@@ -147,6 +148,7 @@ async function getSession(phone) {
     return { phone, state: 'START', data: {} };
   }
 }
+
 async function saveSession(phone, state, data = {}) {
   try {
     const pool = await getDB();
@@ -202,9 +204,7 @@ async function handleService(phone, input, data) {
 }
 
 async function handleSubType(phone, input, data) {
-  console.log('handleSubType input:', input, 'service:', data.service, 'subtypes:', JSON.stringify(SUB_TYPES[data.service]));
   const sub = (SUB_TYPES[data.service] || []).find(s => s.id === input);
-  console.log('found sub:', JSON.stringify(sub));
   if (!sub) { await sendText(phone, 'Please select an option from the list, or type *menu* to restart.'); return; }
   data.subtype = input; data.subtype_label = sub.title;
   await sendText(phone, `Perfect! *${sub.title}* — noted. 📝\n\nWhat date(s) are you thinking?\n\n_Example: 15 July 2026 or "anytime in August"_`);
@@ -247,13 +247,9 @@ async function sendConfirmSummary(phone, data) {
 }
 
 async function handleConfirm(phone, input, data) {
- if (input === 'confirm_yes') {
-    console.log('Saving booking...');
+  if (input === 'confirm_yes') {
     try {
-      console.log('Getting DB pool...');
       const pool = await getDB();
-      console.log('Running INSERT...');
-      const [result] = await pool.query(
       const [result] = await pool.query(
         `INSERT INTO wa_bookings (phone, client_name, client_email, service, service_label, subtype, subtype_label, preferred_date, notes, status, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
@@ -261,11 +257,10 @@ async function handleConfirm(phone, input, data) {
       );
       await sendText(phone, `🎉 *Request Sent!*\n\nThanks *${data.client_name}* — we'll be in touch within 24 hours.\n\n📋 *Reference:* #BMG-${result.insertId}\n\nType *menu* to make another booking. 🙏`);
       await saveSession(phone, 'DONE', data);
-      await sendText('27650767631', `🔔 *New Booking #BMG-${result.insertId}*\n\n👤 ${data.client_name}\n📱 +${phone}\n📧 ${data.client_email}\n🎯 ${data.service_label} → ${data.subtype_label}\n📅 ${data.preferred_date}\n📌 ${data.notes || 'No notes'}`);
-      await (result.insertId, data, phone);
-    } catch(e) { 
-      console.error('Save booking error:', e.message, e.code, e.sqlMessage); 
-      await sendText(phone, 'Sorry, something went wrong saving your booking. Please try again.'); 
+      await appendToSheet(result.insertId, data, phone);
+    } catch(e) {
+      console.error('Save booking error:', e.message);
+      await sendText(phone, 'Sorry, something went wrong. Please try again.');
     }
   } else if (input === 'confirm_edit') {
     await resetSession(phone); await sendText(phone, "No problem! Type *hi* to start over. 😊");
