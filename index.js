@@ -99,8 +99,8 @@ async function getSession(phone) {
       'SELECT * FROM wa_sessions WHERE phone = ?', [phone]
     );
     if (!rows.length) { await saveSession(phone, 'START', {}); return { phone, state: 'START', data: {} }; }
-    try { rows[0].data = JSON.parse(rows[0].data || '{}'); } catch(je) { rows[0].data = {}; }
-    return rows[0];
+    try {rows[0].data = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data || '{}') : (rows[0].data || {});
+} catch(je) { rows[0].data = {}; }
   } catch(e) {
     console.error('getSession error:', JSON.stringify(e), e.message, e.code, e.sqlMessage);
     return { phone, state: 'START', data: {} };
