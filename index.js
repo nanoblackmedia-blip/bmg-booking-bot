@@ -11,16 +11,11 @@ const WA_API = `https://graph.facebook.com/v19.0/${process.env.WA_PHONE_NUMBER_I
 // ─── Google Sheets ────────────────────────────────────────────────────────────
 async function appendToSheet(bookingId, data, phone) {
   try {
-    const rawCreds = process.env.GOOGLE_CREDENTIALS;
-const cleaned = rawCreds.replace(/[\u0000-\u001F\u007F-\u009F]/g, (c) => {
-  if (c === '\n') return '\\n';
-  if (c === '\r') return '\\r';
-  if (c === '\t') return '\\t';
-  return '';
-});
-const creds = JSON.parse(cleaned);
-    const auth  = new google.auth.GoogleAuth({
-      credentials: creds,
+    const auth = new google.auth.GoogleAuth({
+      credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      },
       scopes: ['https://www.googleapis.com/auth/spreadsheets'],
     });
     const sheets = google.sheets({ version: 'v4', auth });
