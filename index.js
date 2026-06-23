@@ -100,7 +100,7 @@ async function getSession(phone) {
     rows[0].data = JSON.parse(rows[0].data || '{}');
     return rows[0];
   } catch(e) {
-    console.error('getSession error:', e.message);
+    console.error('getSession error:', JSON.stringify(e), e.message, e.code, e.sqlMessage);
     return { phone, state: 'START', data: {} };
   }
 }
