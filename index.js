@@ -189,11 +189,33 @@ async function handle(phone, displayName, input, msgType) {
 }
 
 async function sendWelcome(phone, name) {
-  await sendButtons(phone,
-    `👋 Hey there ${name}! Welcome to the *Nanoblack Bookings!*\n\n𝒄𝒍𝒊𝒄𝒌 𝒂𝒏𝒚 𝒃𝒖𝒕𝒕𝒐𝒏 𝒃𝒆𝒍𝒐𝒘 𝒕𝒐 𝒃𝒆𝒈𝒊𝒏.\n\nWhat would you like to enquire about today?`,
-    [{ id: 'svc_photo', title: '📸 Photography' }, { id: 'svc_video', title: '🎬 Videography' }, { id: 'svc_pv', title: '📸+🎬 Photo + Video' }],
-    'Black Meridian Group'
-  );
+  try {
+    const payload = {
+      messaging_product: 'whatsapp',
+      to: phone,
+      type: 'interactive',
+      interactive: {
+        type: 'button',
+        header: {
+          type: 'image',
+          image: { link: 'https://www.blackmeridian.co.za/images/header.jpg' },
+        },
+        body: {
+          text: `👋 Hey there ${name}! Welcome to the *Nanoblack Bookings!*\n\n𝒄𝒍𝒊𝒄𝒌 𝒂𝒏𝒚 𝒃𝒖𝒕𝒕𝒐𝒏 𝒃𝒆𝒍𝒐𝒘 𝒕𝒐 𝒃𝒆𝒈𝒊𝒏.\n\nWhat would you like to enquire about today?`,
+        },
+        action: {
+          buttons: [
+            { type: 'reply', reply: { id: 'svc_photo', title: '📸 Photography' } },
+            { type: 'reply', reply: { id: 'svc_video', title: '🎬 Videography' } },
+            { type: 'reply', reply: { id: 'svc_pv', title: '📸+🎬 Photo + Video' } },
+          ],
+        },
+      },
+    };
+    await axios.post(WA_API, payload, { headers: { Authorization: `Bearer ${process.env.WA_ACCESS_TOKEN}` } });
+  } catch(e) {
+    console.error('sendWelcome error:', e.response?.data || e.message);
+  }
 }
 
 async function handleService(phone, input, data) {
