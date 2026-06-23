@@ -152,7 +152,7 @@ async function handle(phone, displayName, input, msgType) {
 
 async function sendWelcome(phone, name) {
   await sendButtons(phone,
-    `👋 Hey there ${name}! Welcome to *Nanoblack.co Bookings!*\nClick anybelow to begin enquiring.\n\nWhat would you like to enquire about today?`,
+    `👋 Hey there ${name}! Welcome to the *Nanoblack Bookings!*\n𝒄𝒍𝒊𝒄𝒌 𝒂𝒏𝒚 𝒃𝒖𝒕𝒕𝒐𝒏 𝒃𝒆𝒍𝒐𝒘 𝒕𝒐 𝒃𝒆𝒈𝒊𝒏.\n\nWhat would you like to enquire about today?`,
     [{ id: 'svc_photo', title: '📸 Photography' }, { id: 'svc_video', title: '🎬 Videography' }, { id: 'svc_pv', title: '📸+🎬 Photo + Video' }],
     'Black Meridian Group'
   );
