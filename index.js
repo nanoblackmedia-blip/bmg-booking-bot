@@ -260,7 +260,10 @@ async function handleConfirm(phone, input, data) {
       await saveSession(phone, 'DONE', data);
       await sendText('27650767631', `🔔 *New Booking #BMG-${result.insertId}*\n\n👤 ${data.client_name}\n📱 +${phone}\n📧 ${data.client_email}\n🎯 ${data.service_label} → ${data.subtype_label}\n📅 ${data.preferred_date}\n📌 ${data.notes || 'No notes'}`);
       await (result.insertId, data, phone);
-    } catch(e) { console.error('Save booking error:', e.message); await sendText(phone, 'Sorry, something went wrong saving your booking. Please try again.'); }
+    } catch(e) { 
+      console.error('Save booking error:', e.message, e.code, e.sqlMessage); 
+      await sendText(phone, 'Sorry, something went wrong saving your booking. Please try again.'); 
+    }
   } else if (input === 'confirm_edit') {
     await resetSession(phone); await sendText(phone, "No problem! Type *hi* to start over. 😊");
   } else if (input === 'confirm_cancel') {
