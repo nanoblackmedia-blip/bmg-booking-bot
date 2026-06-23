@@ -126,7 +126,7 @@ async function handle(phone, displayName, input, msgType) {
   const state = sess.state;
   const data  = sess.data;
 
-  if (['menu','hi','hello','start','restart','hallo'].includes(input.toLowerCase())) {
+  if (['menu','hi','hey','hello','start','restart','hallo','good morning','good afternoon',].includes(input.toLowerCase())) {
     await resetSession(phone);
     await sendWelcome(phone, displayName);
     await saveSession(phone, 'CHOOSE_SERVICE', { name: displayName });
@@ -149,7 +149,7 @@ async function handle(phone, displayName, input, msgType) {
 async function sendWelcome(phone, name) {
   await sendButtons(phone,
     `👋 Hey ${name}! Welcome to *Black Meridian Group*.\n\nWhat can we help you with today?`,
-    [{ id: 'svc_photo', title: '📸 Photography' }, { id: 'svc_video', title: '🎬 Videography' }, { id: 'svc_web', title: '💻 Web Design' }],
+    [{ id: 'svc_photo', title: '📸 Photography' }, { id: 'svc_video', title: '🎬 Videography' }, { id: 'svc_pv', title: '📸+🎬 Photo + Video' }],
     'Black Meridian Group'
   );
 }
