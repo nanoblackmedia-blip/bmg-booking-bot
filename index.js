@@ -26,15 +26,14 @@ async function getDB() {
 const SERVICES = {
   svc_photo: '📸 Photography',
   svc_video: '🎬 Videography',
-  svc_web:   '💻 Web Design',
+  svc_pv:   '📸+🎬 Photo + Video',
 };
 
 const SUB_TYPES = {
   svc_photo: [
-    { id: 'sub_portrait',  title: 'Portrait / Headshots',    description: 'Personal or corporate' },
-    { id: 'sub_event',     title: 'Event Coverage',           description: 'Conferences, parties, launches' },
-    { id: 'sub_product',   title: 'Product / Commercial',     description: 'E-commerce, advertising' },
-    { id: 'sub_property',  title: 'Property / Architecture',  description: 'Real estate, interior' },
+    { id: 'sub_portrait',  title: 'Portrait',    description: 'Matric Dance, Studio' },
+    { id: 'sub_event',     title: 'Event Coverage',           description: 'Conferences, parties, launches, birthdays, dinners' },
+    { id: 'sub_product',   title: 'Brands',     description: 'For Brands who need content for Promo' },
   ],
   svc_video: [
     { id: 'sub_promo',     title: 'Promo / Ad Video',         description: 'Social media, TV spots' },
@@ -42,11 +41,14 @@ const SUB_TYPES = {
     { id: 'sub_event_vid', title: 'Event Filming',            description: 'Full event coverage' },
     { id: 'sub_music',     title: 'Music Video',              description: 'Artists & labels' },
   ],
-  svc_web: [
-    { id: 'sub_newsite',   title: 'New Website',              description: 'Design & build from scratch' },
-    { id: 'sub_redesign',  title: 'Redesign / Revamp',        description: 'Refresh an existing site' },
-    { id: 'sub_ecom',      title: 'E-commerce Store',         description: 'WooCommerce / Shopify' },
-    { id: 'sub_landing',   title: 'Landing Page',             description: 'Single conversion page' },
+  svc_pv: [
+    { id: 'sub_portrait',  title: 'Portrait',    description: 'Matric Dance, Studio' },
+    { id: 'sub_event',     title: 'Event Coverage',           description: 'Conferences, parties, launches, birthdays, dinners' },
+    { id: 'sub_product',   title: 'Brands',     description: 'For Brands who need content for Promo' },
+    { id: 'sub_promo',     title: 'Promo / Ads',         description: 'Social media, TV spots' },
+    { id: 'sub_corporate', title: 'Corporate',          description: 'Internal comms, training' },
+    { id: 'sub_event_vid', title: 'Event Filming',            description: 'Full event coverage' },
+    { id: 'sub_music',     title: 'Music Video',              description: 'Artists & labels' },
   ],
 };
 
