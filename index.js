@@ -162,7 +162,9 @@ async function handleService(phone, input, data) {
 }
 
 async function handleSubType(phone, input, data) {
+  console.log('handleSubType input:', input, 'service:', data.service, 'subtypes:', JSON.stringify(SUB_TYPES[data.service]));
   const sub = (SUB_TYPES[data.service] || []).find(s => s.id === input);
+  console.log('found sub:', JSON.stringify(sub));
   if (!sub) { await sendText(phone, 'Please select an option from the list, or type *menu* to restart.'); return; }
   data.subtype = input; data.subtype_label = sub.title;
   await sendText(phone, `Perfect! *${sub.title}* — noted. 📝\n\nWhat date(s) are you thinking?\n\n_Example: 15 July 2026 or "anytime in August"_`);
