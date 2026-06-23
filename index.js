@@ -95,18 +95,22 @@ async function sendList(to, body, buttonLabel, sections) {
 async function getSession(phone) {
   try {
     const pool = await getDB();
-    const [rows] = await pool.query(
-      'SELECT * FROM wa_sessions WHERE phone = ?', [phone]
-    );
-    if (!rows.length) { await saveSession(phone, 'START', {}); return { phone, state: 'START', data: {} }; }
-    try {rows[0].data = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data || '{}') : (rows[0].data || {});
-} catch(je) { rows[0].data = {}; }
+    const [rows] = await pool.query('SELECT * FROM wa_sessions WHERE phone = ?', [phone]);
+    if (!rows.length) {
+      await saveSession(phone, 'START', {});
+      return { phone, state: 'START', data: {} };
+    }
+    const raw = rows[0];
+    let data = {};
+    if (raw.data) {
+      data = typeof raw.data === 'object' ? raw.data : JSON.parse(raw.data);
+    }
+    return { phone: raw.phone, state: raw.state, data };
   } catch(e) {
-    console.error('getSession error:', JSON.stringify(e), e.message, e.code, e.sqlMessage);
+    console.error('getSession error:', e.message);
     return { phone, state: 'START', data: {} };
   }
 }
-
 async function saveSession(phone, state, data = {}) {
   try {
     const pool = await getDB();
