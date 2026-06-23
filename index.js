@@ -52,7 +52,7 @@ let db;
 async function getDB() {
   if (!db) {
     db = await mysql.createPool({
-      host: MYSQLHOST, database: MYSQL_DATABASE,
+      host: MYSQLHOST, database: process.env.MYSQL_DATABASE || process.env.MYSQLDATABASE,
       user: MYSQLUSER, password: MYSQLPASSWORD,
       port: MYSQLPORT,
       waitForConnections: true, connectionLimit: 5,
