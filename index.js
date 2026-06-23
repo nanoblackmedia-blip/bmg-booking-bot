@@ -11,7 +11,7 @@ const WA_API = `https://graph.facebook.com/v19.0/${process.env.WA_PHONE_NUMBER_I
 // ─── Google Sheets ────────────────────────────────────────────────────────────
 async function appendToSheet(bookingId, data, phone) {
   try {
-    const creds = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    const creds = JSON.parse(process.env.GOOGLE_CREDENTIALS.replace(/\\n/g, '\n'));
     const auth  = new google.auth.GoogleAuth({
       credentials: creds,
       scopes: ['https://www.googleapis.com/auth/spreadsheets'],
