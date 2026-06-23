@@ -248,6 +248,7 @@ async function sendConfirmSummary(phone, data) {
 
 async function handleConfirm(phone, input, data) {
   if (input === 'confirm_yes') {
+       console.log('Saving booking...');
     try {
       const pool = await getDB();
       const [result] = await pool.query(
