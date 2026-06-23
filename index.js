@@ -10,10 +10,11 @@ const {
   WA_PHONE_NUMBER_ID,
   WA_ACCESS_TOKEN,
   WEBHOOK_VERIFY_TOKEN,
-  DB_HOST,
-  DB_NAME,
-  DB_USER,
-  DB_PASS,
+  MYSQLHOST,
+  MYSQL_DATABASE,
+  MYSQLUSER,
+  MYSQLPASSWORD,
+  MYSQLPORT = 3306,
   PORT = 3000,
 } = process.env;
 
@@ -52,8 +53,9 @@ let db;
 async function getDB() {
   if (!db) {
     db = await mysql.createPool({
-      host: DB_HOST, database: DB_NAME,
-      user: DB_USER, password: DB_PASS,
+      host: MYSQLHOST, database: MYSQL_DATABASE,
+      user: MYSQLUSER, password: MYSQLPASSWORD,
+      port: MYSQLPORT,
       waitForConnections: true, connectionLimit: 5,
     });
   }
