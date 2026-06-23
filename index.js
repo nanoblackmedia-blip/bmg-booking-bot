@@ -247,10 +247,13 @@ async function sendConfirmSummary(phone, data) {
 }
 
 async function handleConfirm(phone, input, data) {
-  if (input === 'confirm_yes') {
-       console.log('Saving booking...');
+ if (input === 'confirm_yes') {
+    console.log('Saving booking...');
     try {
+      console.log('Getting DB pool...');
       const pool = await getDB();
+      console.log('Running INSERT...');
+      const [result] = await pool.query(
       const [result] = await pool.query(
         `INSERT INTO wa_bookings (phone, client_name, client_email, service, service_label, subtype, subtype_label, preferred_date, notes, status, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
