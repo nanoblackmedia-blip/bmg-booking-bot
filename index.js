@@ -192,7 +192,7 @@ async function handleName(phone, input, data) {
 async function handleEmail(phone, input, data) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input)) { await sendText(phone, "That doesn't look valid. Try again — e.g. _name@gmail.com_"); return; }
   data.client_email = input;
-  await sendText(phone, 'Almost done! Any extra details or requirements?\n\n_Type *skip* if none._');
+  await sendText(phone, 'Almost done!Please enter the location and timeslot\n\n_Type *skip* if none._');
   await saveSession(phone, 'ENTER_NOTES', data);
 }
 
