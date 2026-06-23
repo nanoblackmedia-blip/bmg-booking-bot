@@ -94,7 +94,7 @@ async function getSession(phone) {
   try {
     const pool = await getDB();
     const [rows] = await pool.query(
-      ''SELECT * FROM wa_sessions WHERE phone = ?', [phone]
+      'SELECT * FROM wa_sessions WHERE phone = ?', [phone]
     );
     if (!rows.length) { await saveSession(phone, 'START', {}); return { phone, state: 'START', data: {} }; }
     rows[0].data = JSON.parse(rows[0].data || '{}');
