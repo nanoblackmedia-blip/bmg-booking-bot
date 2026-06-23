@@ -1,11 +1,46 @@
-const express = require('express');
-const mysql   = require('mysql2/promise');
-const axios   = require('axios');
+const express    = require('express');
+const mysql      = require('mysql2/promise');
+const axios      = require('axios');
+const { google } = require('googleapis');
 
 const app = express();
 app.use(express.json());
 
 const WA_API = `https://graph.facebook.com/v19.0/${process.env.WA_PHONE_NUMBER_ID}/messages`;
+
+// ─── Google Sheets ────────────────────────────────────────────────────────────
+async function appendToSheet(bookingId, data, phone) {
+  try {
+    const creds = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    const auth  = new google.auth.GoogleAuth({
+      credentials: creds,
+      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    });
+    const sheets = google.sheets({ version: 'v4', auth });
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Sheet1!A:J',
+      valueInputOption: 'USER_ENTERED',
+      resource: {
+        values: [[
+          `#BMG-${bookingId}`,
+          new Date().toLocaleString('en-ZA'),
+          data.client_name,
+          `+${phone}`,
+          data.client_email,
+          data.service_label,
+          data.subtype_label,
+          data.preferred_date,
+          data.notes || '',
+          'Pending',
+        ]],
+      },
+    });
+    console.log('Booking appended to Google Sheet');
+  } catch(e) {
+    console.error('Google Sheets error:', e.message);
+  }
+}
 
 // ─── DB ───────────────────────────────────────────────────────────────────────
 let db;
@@ -192,7 +227,7 @@ async function handleName(phone, input, data) {
 async function handleEmail(phone, input, data) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input)) { await sendText(phone, "That doesn't look valid. Try again — e.g. _name@gmail.com_"); return; }
   data.client_email = input;
-  await sendText(phone, 'Almost done!Please enter the location and timeslot\n\n_Type *skip* if none._');
+  await sendText(phone, 'Almost done! Please enter the location and timeslot\n\n_Type *skip* if none._');
   await saveSession(phone, 'ENTER_NOTES', data);
 }
 
@@ -221,6 +256,7 @@ async function handleConfirm(phone, input, data) {
       );
       await sendText(phone, `🎉 *Request Sent!*\n\nThanks *${data.client_name}* — we'll be in touch within 24 hours.\n\n📋 *Reference:* #BMG-${result.insertId}\n\nType *menu* to make another booking. 🙏`);
       await saveSession(phone, 'DONE', data);
+      await appendToSheet(result.insertId, data, phone);
     } catch(e) { console.error('Save booking error:', e.message); await sendText(phone, 'Sorry, something went wrong saving your booking. Please try again.'); }
   } else if (input === 'confirm_edit') {
     await resetSession(phone); await sendText(phone, "No problem! Type *hi* to start over. 😊");
