@@ -23,7 +23,7 @@ const WA_API = `https://graph.facebook.com/v19.0/${WA_PHONE_NUMBER_ID}/messages`
 const SERVICES = {
   svc_photo: '📸 Photography',
   svc_video: '🎬 Videography',
-  svc_web:   '💻 Web Design',
+  svc_web:   '🎬 Photo + Video',
 };
 
 const SUB_TYPES = {
