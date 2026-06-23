@@ -152,7 +152,7 @@ async function handle(phone, displayName, input, msgType) {
 
 async function sendWelcome(phone, name) {
   await sendButtons(phone,
-    `👋 Hey ${name}! Welcome to *Black Meridian Group*.\n\nWhat can we help you with today?`,
+    `👋 Hey ${name}! Welcome to *Nanoblack Bookings!.\n\nWhat would you like to enquire about today?`,
     [{ id: 'svc_photo', title: '📸 Photography' }, { id: 'svc_video', title: '🎬 Videography' }, { id: 'svc_pv', title: '📸+🎬 Photo + Video' }],
     'Black Meridian Group'
   );
@@ -219,7 +219,7 @@ async function handleConfirm(phone, input, data) {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
         [phone, data.client_name, data.client_email, data.service, data.service_label, data.subtype, data.subtype_label, data.preferred_date, data.notes || '']
       );
-      await sendText(phone, `🎉 *Booking Confirmed!*\n\nThanks *${data.client_name}* — we'll be in touch within 24 hours.\n\n📋 *Reference:* #BMG-${result.insertId}\n\nType *menu* to make another booking. 🙏`);
+      await sendText(phone, `🎉 *Request Sent!*\n\nThanks *${data.client_name}* — we'll be in touch within 24 hours.\n\n📋 *Reference:* #BMG-${result.insertId}\n\nType *menu* to make another booking. 🙏`);
       await saveSession(phone, 'DONE', data);
     } catch(e) { console.error('Save booking error:', e.message); await sendText(phone, 'Sorry, something went wrong saving your booking. Please try again.'); }
   } else if (input === 'confirm_edit') {
