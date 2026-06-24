@@ -201,7 +201,7 @@ async function sendWelcome(phone, name) {
           image: { link: 'https://www.blackmeridian.co.za/images/header.jpg' },
         },
         body: {
-          text: `👋 Hey there ${name}! Welcome to the *Nanoblack Bookings!*\n\n𝒄𝒍𝒊𝒄𝒌 𝒂𝒏𝒚 𝒃𝒖𝒕𝒕𝒐𝒏 𝒃𝒆𝒍𝒐𝒘 𝒕𝒐 𝒃𝒆𝒈𝒊𝒏.\n\nWhat would you like to enquire about today?`,
+          text: `👋 Hey there ${name}! Welcome to the *Nanoblack Enquiry System!*\n\n> Built for our valued clients so their time is never wasted waiting on a reply.\n\nWhat would you like to enquire about today?`,
         },
         action: {
           buttons: [
