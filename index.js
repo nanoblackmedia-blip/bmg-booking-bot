@@ -279,15 +279,33 @@ async function handleConfirm(phone, input, data) {
       );
       await sendText(phone, `🎉 *Request Sent!*\n\nThanks *${data.client_name}* — we'll be in touch within 24 hours.\n\n📋 *Reference:* #BMG-${result.insertId}\n\nType *menu* to make another booking. 🙏`);
       await saveSession(phone, 'DONE', data);
-      await sendText('27650767631', 
-  `🔔 *New Booking #BMG-${result.insertId}*\n\n` +
-  `👤 ${data.client_name}\n` +
-  `📱 +${phone}\n` +
-  `📧 ${data.client_email}\n` +
-  `🎯 ${data.service_label} → ${data.subtype_label}\n` +
-  `📅 ${data.preferred_date}\n` +
-  `📌 ${data.notes || 'No notes'}`
-);
+    // Send admin notification via approved template
+try {
+  await axios.post(WA_API, {
+    messaging_product: 'whatsapp',
+    to: '27650767631',
+    type: 'template',
+    template: {
+      name: 'new_booking_notification',
+      language: { code: 'en' },
+      components: [{
+        type: 'body',
+        parameters: [
+          { type: 'text', text: `#BMG-${result.insertId}` },
+          { type: 'text', text: data.client_name },
+          { type: 'text', text: `+${phone}` },
+          { type: 'text', text: data.client_email },
+          { type: 'text', text: `${data.service_label} → ${data.subtype_label}` },
+          { type: 'text', text: data.preferred_date },
+          { type: 'text', text: data.notes || 'None' },
+        ],
+      }],
+    },
+  }, { headers: { Authorization: `Bearer ${process.env.WA_ACCESS_TOKEN}` } });
+  console.log('Admin notification sent');
+} catch(e) {
+  console.error('Admin notification error:', e.response?.data || e.message);
+}
       await appendToSheet(result.insertId, data, phone);
     } catch(e) {
       console.error('Save booking error:', e.message);
