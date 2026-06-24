@@ -279,6 +279,15 @@ async function handleConfirm(phone, input, data) {
       );
       await sendText(phone, `🎉 *Request Sent!*\n\nThanks *${data.client_name}* — we'll be in touch within 24 hours.\n\n📋 *Reference:* #BMG-${result.insertId}\n\nType *menu* to make another booking. 🙏`);
       await saveSession(phone, 'DONE', data);
+      await sendText('27650767631', 
+  `🔔 *New Booking #BMG-${result.insertId}*\n\n` +
+  `👤 ${data.client_name}\n` +
+  `📱 +${phone}\n` +
+  `📧 ${data.client_email}\n` +
+  `🎯 ${data.service_label} → ${data.subtype_label}\n` +
+  `📅 ${data.preferred_date}\n` +
+  `📌 ${data.notes || 'No notes'}`
+);
       await appendToSheet(result.insertId, data, phone);
     } catch(e) {
       console.error('Save booking error:', e.message);
