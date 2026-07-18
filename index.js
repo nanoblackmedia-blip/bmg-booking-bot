@@ -14,6 +14,13 @@ const RATE_SHEETS = {
   sub_md: `${PUBLIC_BASE_URL}/rates/matric-dance-rates.pdf`,
 };
 
+const BOOKING_DATE_FLOW_ID = '908090289013623';
+const TIME_SLOT_LABELS = {
+  morning: 'Morning (8am - 12pm)',
+  afternoon: 'Afternoon (12pm - 4pm)',
+  evening: 'Evening (4pm - 7pm)',
+};
+
 // ─── Google Sheets ────────────────────────────────────────────────────────────
 async function appendToSheet(bookingId, data, phone) {
   try {
@@ -154,6 +161,33 @@ async function sendDocument(to, link, filename, caption = '') {
     console.log(`sendDocument OK to ${to}`);
   } catch(e) {
     console.error('sendDocument error:', e.response?.data || e.message);
+  }
+}
+
+async function sendDatePickerFlow(to) {
+  try {
+    console.log(`Sending date picker flow to ${to}`);
+    await axios.post(WA_API, {
+      messaging_product: 'whatsapp', to, type: 'interactive',
+      interactive: {
+        type: 'flow',
+        body: { text: 'Tap below to pick your date and time from the calendar. 📅' },
+        action: {
+          name: 'flow',
+          parameters: {
+            flow_message_version: '3',
+            flow_token: 'unused',
+            flow_id: BOOKING_DATE_FLOW_ID,
+            flow_cta: 'Pick a Date',
+            flow_action: 'navigate',
+            flow_action_payload: { screen: 'BOOKING_DATE_TIME' },
+          },
+        },
+      },
+    }, { headers: { Authorization: `Bearer ${process.env.WA_ACCESS_TOKEN}` }, timeout: WA_TIMEOUT_MS });
+    console.log(`sendDatePickerFlow OK to ${to}`);
+  } catch(e) {
+    console.error('sendDatePickerFlow error:', e.response?.data || e.message);
   }
 }
 
@@ -325,19 +359,30 @@ async function handleSubType(phone, input, data) {
   data.subtype = input; data.subtype_label = sub.title;
   await sendButtons(phone,
     `Perfect! *${sub.title}* — noted. 📝\n\nWhat date and time are you thinking?\n\n_Example: 15 July 2026, 14:00 or "anytime in August"_`,
-    [{ id: 'date_not_sure', title: '🤔 Not Sure Yet' }]
+    [{ id: 'date_pick_flow', title: '🤔 Not Sure? Pick' }]
   );
   await saveSession(phone, 'ENTER_DATE', data);
 }
 
 async function handleDate(phone, input, data) {
-  if (input === 'date_not_sure') {
-    data.preferred_date = 'To be confirmed';
-    await sendText(phone, "No problem! We'll sort out a date and time with you directly. 😊\n\nWhat's your full name?");
+  if (input === 'date_pick_flow') {
+    await sendDatePickerFlow(phone);
+    return;
+  }
+  if (input.startsWith('flow_reply:')) {
+    try {
+      const { booking_date, booking_time } = JSON.parse(input.slice('flow_reply:'.length));
+      const timeLabel = TIME_SLOT_LABELS[booking_time] || booking_time;
+      data.preferred_date = `${booking_date}, ${timeLabel}`;
+    } catch(e) {
+      await sendText(phone, "Sorry, we couldn't read that. Please enter a date and time, or tap *Not Sure? Pick* above.");
+      return;
+    }
+    await sendText(phone, `Got it — *${data.preferred_date}*. 📅\n\nWhat's your full name?`);
     await saveSession(phone, 'ENTER_NAME', data);
     return;
   }
-  if (input.trim().length < 3) { await sendText(phone, 'Please enter a date and time, or tap *Not Sure Yet* above.'); return; }
+  if (input.trim().length < 3) { await sendText(phone, 'Please enter a date and time, or tap *Not Sure? Pick* above.'); return; }
   data.preferred_date = input;
   await sendText(phone, `Got it — *${input}*. 📅\n\nWhat's your full name?`);
   await saveSession(phone, 'ENTER_NAME', data);
@@ -451,6 +496,7 @@ app.post('/webhook', async (req, res) => {
       const iType = message.interactive?.type;
       if (iType === 'button_reply') input = message.interactive.button_reply?.id || '';
       if (iType === 'list_reply')   input = message.interactive.list_reply?.id || '';
+      if (iType === 'nfm_reply')    input = `flow_reply:${message.interactive.nfm_reply?.response_json || '{}'}`;
     }
     console.log(`MSG from ${phone}: "${input}" (${msgType})`);
     await handle(phone, displayName, input, msgType);
