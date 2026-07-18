@@ -14,6 +14,15 @@ const RATE_SHEETS = {
   sub_md: `${PUBLIC_BASE_URL}/rates/matric-dance-rates.pdf`,
 };
 
+const PACKAGES = {
+  sub_md: [
+    { id: 'pkg_entry',    title: 'Entry — R2000',    file: 'matric-dance-entry.pdf' },
+    { id: 'pkg_standard', title: 'Standard — R3000', file: 'matric-dance-standard.pdf' },
+    { id: 'pkg_halfday',  title: 'Half-Day — R5000', file: 'matric-dance-halfday.pdf' },
+    { id: 'pkg_fullday',  title: 'Full Day — R7000', file: 'matric-dance-fullday.pdf' },
+  ],
+};
+
 // ─── Google Sheets ────────────────────────────────────────────────────────────
 async function appendToSheet(bookingId, data, phone) {
   try {
@@ -208,6 +217,7 @@ async function handle(phone, displayName, input, msgType) {
     case 'START':          await sendMainMenu(phone, displayName); await saveSession(phone, 'MAIN_MENU', { name: displayName }); break;
     case 'MAIN_MENU':      await handleMainMenu(phone, displayName, input, data); break;
     case 'CHOOSE_RATE':    await handleChooseRate(phone, input, data); break;
+    case 'CHOOSE_PACKAGE': await handleChoosePackage(phone, input, data); break;
     case 'POST_RATES':     await handlePostRates(phone, displayName, input, data); break;
     case 'CHOOSE_SERVICE': await handleService(phone, input, data); break;
     case 'CHOOSE_SUBTYPE': await handleSubType(phone, input, data); break;
@@ -247,11 +257,30 @@ async function handleChooseRate(phone, input, data) {
   const option = RATE_OPTIONS.find(o => o.id === input);
   if (!option) { await sendText(phone, 'Please select an occasion from the list, or type *menu* to restart.'); return; }
   const subId = option.id.replace('rate_', '');
+  if (PACKAGES[subId]) {
+    await sendPackageList(phone, subId, option.title);
+    await saveSession(phone, 'CHOOSE_PACKAGE', { ...data, rate_subId: subId, rate_label: option.title });
+    return;
+  }
   if (RATE_SHEETS[subId]) {
     await sendDocument(phone, RATE_SHEETS[subId], `${option.title} Rates.pdf`, `Here's our ${option.title} rate card 📄`);
   } else {
     await sendText(phone, `Our *${option.title}* rate sheet is coming soon — message us directly and we'll send you a quote! 🙏`);
   }
+  await sendPostRatesPrompt(phone);
+  await saveSession(phone, 'POST_RATES', data);
+}
+
+async function sendPackageList(phone, subId, occasionLabel) {
+  const rows = PACKAGES[subId].map(p => ({ id: p.id, title: p.title }));
+  await sendList(phone, `Which *${occasionLabel}* package would you like rates for?`, 'View Packages', [{ title: 'Select a Package', rows }]);
+}
+
+async function handleChoosePackage(phone, input, data) {
+  const packages = PACKAGES[data.rate_subId] || [];
+  const pkg = packages.find(p => p.id === input);
+  if (!pkg) { await sendText(phone, 'Please select a package from the list, or type *menu* to restart.'); return; }
+  await sendDocument(phone, `${PUBLIC_BASE_URL}/rates/${pkg.file}`, `${data.rate_label} ${pkg.title}.pdf`, `Here's our ${data.rate_label} — ${pkg.title} rate card 📄`);
   await sendPostRatesPrompt(phone);
   await saveSession(phone, 'POST_RATES', data);
 }
