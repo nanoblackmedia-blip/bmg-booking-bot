@@ -90,11 +90,15 @@ const SUB_TYPES = {
 };
 
 // ─── WhatsApp API ─────────────────────────────────────────────────────────────
+const WA_TIMEOUT_MS = 10000;
+
 async function sendText(to, text) {
   try {
+    console.log(`Sending text to ${to}`);
     await axios.post(WA_API, {
       messaging_product: 'whatsapp', to, type: 'text', text: { body: text },
-    }, { headers: { Authorization: `Bearer ${process.env.WA_ACCESS_TOKEN}` } });
+    }, { headers: { Authorization: `Bearer ${process.env.WA_ACCESS_TOKEN}` }, timeout: WA_TIMEOUT_MS });
+    console.log(`sendText OK to ${to}`);
   } catch(e) {
     console.error('sendText error:', e.response?.data || e.message);
   }
@@ -111,7 +115,9 @@ async function sendButtons(to, body, buttons, header = '') {
       },
     };
     if (header) payload.interactive.header = { type: 'text', text: header };
-    await axios.post(WA_API, payload, { headers: { Authorization: `Bearer ${process.env.WA_ACCESS_TOKEN}` } });
+    console.log(`Sending buttons to ${to}`);
+    await axios.post(WA_API, payload, { headers: { Authorization: `Bearer ${process.env.WA_ACCESS_TOKEN}` }, timeout: WA_TIMEOUT_MS });
+    console.log(`sendButtons OK to ${to}`);
   } catch(e) {
     console.error('sendButtons error:', e.response?.data || e.message);
   }
@@ -119,10 +125,12 @@ async function sendButtons(to, body, buttons, header = '') {
 
 async function sendList(to, body, buttonLabel, sections) {
   try {
+    console.log(`Sending list to ${to}`);
     await axios.post(WA_API, {
       messaging_product: 'whatsapp', to, type: 'interactive',
       interactive: { type: 'list', body: { text: body }, action: { button: buttonLabel.substring(0, 20), sections } },
-    }, { headers: { Authorization: `Bearer ${process.env.WA_ACCESS_TOKEN}` } });
+    }, { headers: { Authorization: `Bearer ${process.env.WA_ACCESS_TOKEN}` }, timeout: WA_TIMEOUT_MS });
+    console.log(`sendList OK to ${to}`);
   } catch(e) {
     console.error('sendList error:', e.response?.data || e.message);
   }
@@ -212,7 +220,9 @@ async function sendWelcome(phone, name) {
         },
       },
     };
-    await axios.post(WA_API, payload, { headers: { Authorization: `Bearer ${process.env.WA_ACCESS_TOKEN}` } });
+    console.log(`Sending welcome to ${phone}`);
+    await axios.post(WA_API, payload, { headers: { Authorization: `Bearer ${process.env.WA_ACCESS_TOKEN}` }, timeout: WA_TIMEOUT_MS });
+    console.log(`sendWelcome OK to ${phone}`);
   } catch(e) {
     console.error('sendWelcome error:', e.response?.data || e.message);
   }
@@ -301,7 +311,7 @@ try {
         ],
       }],
     },
-  }, { headers: { Authorization: `Bearer ${process.env.WA_ACCESS_TOKEN}` } });
+  }, { headers: { Authorization: `Bearer ${process.env.WA_ACCESS_TOKEN}` }, timeout: WA_TIMEOUT_MS });
   console.log('Admin notification sent');
 } catch(e) {
   console.error('Admin notification error:', e.response?.data || e.message);
