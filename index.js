@@ -86,6 +86,17 @@ const SUB_TYPES = {
   ],
 };
 
+const RATE_OPTIONS = [
+  { id: 'rate_sub_md',        title: 'Matric Dance',     description: 'Matric Dance shoots' },
+  { id: 'rate_sub_portrait',  title: 'Portrait',         description: 'Studio' },
+  { id: 'rate_sub_event',     title: 'Event Coverage',   description: 'Conferences, parties, launches, birthdays, dinners' },
+  { id: 'rate_sub_product',   title: 'Brands',           description: 'For Brands who need content for Promo' },
+  { id: 'rate_sub_promo',     title: 'Promo / Ad Video', description: 'Social media, TV spots' },
+  { id: 'rate_sub_corporate', title: 'Corporate Video',  description: 'Internal comms, training' },
+  { id: 'rate_sub_event_vid', title: 'Event Filming',    description: 'Full event coverage' },
+  { id: 'rate_sub_music',     title: 'Music Video',      description: 'Artists & labels' },
+];
+
 // ─── WhatsApp API ─────────────────────────────────────────────────────────────
 const WA_TIMEOUT_MS = 10000;
 
@@ -188,13 +199,16 @@ async function handle(phone, displayName, input, msgType) {
 
   if (['menu','hi','hey','hello','start','restart','hallo','good morning','good afternoon'].includes(input.toLowerCase())) {
     await resetSession(phone);
-    await sendWelcome(phone, displayName);
-    await saveSession(phone, 'CHOOSE_SERVICE', { name: displayName });
+    await sendMainMenu(phone, displayName);
+    await saveSession(phone, 'MAIN_MENU', { name: displayName });
     return;
   }
 
   switch (state) {
-    case 'START':          await sendWelcome(phone, displayName); await saveSession(phone, 'CHOOSE_SERVICE', { name: displayName }); break;
+    case 'START':          await sendMainMenu(phone, displayName); await saveSession(phone, 'MAIN_MENU', { name: displayName }); break;
+    case 'MAIN_MENU':      await handleMainMenu(phone, displayName, input, data); break;
+    case 'CHOOSE_RATE':    await handleChooseRate(phone, input, data); break;
+    case 'POST_RATES':     await handlePostRates(phone, displayName, input, data); break;
     case 'CHOOSE_SERVICE': await handleService(phone, input, data); break;
     case 'CHOOSE_SUBTYPE': await handleSubType(phone, input, data); break;
     case 'ENTER_DATE':     await handleDate(phone, input, data); break;
@@ -202,7 +216,62 @@ async function handle(phone, displayName, input, msgType) {
     case 'ENTER_EMAIL':    await handleEmail(phone, input, data); break;
     case 'ENTER_NOTES':    await handleNotes(phone, input, data); break;
     case 'CONFIRM':        await handleConfirm(phone, input, data); break;
-    default: await resetSession(phone); await sendWelcome(phone, displayName); await saveSession(phone, 'CHOOSE_SERVICE', { name: displayName });
+    default: await resetSession(phone); await sendMainMenu(phone, displayName); await saveSession(phone, 'MAIN_MENU', { name: displayName });
+  }
+}
+
+async function sendMainMenu(phone, name) {
+  await sendButtons(phone,
+    `👋 Hey there ${name}! Welcome to the *Nanoblack Enquiry System!*\n\n> Built for our valued clients so their time is never wasted waiting on a reply.\n\nWould you like to view our rates, or go ahead and make a booking?`,
+    [{ id: 'menu_rates', title: '📄 View Rates' }, { id: 'menu_book', title: '📅 Make a Booking' }]
+  );
+}
+
+async function handleMainMenu(phone, displayName, input, data) {
+  if (input === 'menu_rates') {
+    await sendRatesList(phone);
+    await saveSession(phone, 'CHOOSE_RATE', data);
+  } else if (input === 'menu_book') {
+    await sendWelcome(phone, displayName);
+    await saveSession(phone, 'CHOOSE_SERVICE', { name: displayName });
+  } else {
+    await sendText(phone, 'Please tap one of the buttons above, or type *menu* to start over.');
+  }
+}
+
+async function sendRatesList(phone) {
+  await sendList(phone, 'Which occasion would you like rates for?', 'View Rates', [{ title: 'Select an Occasion', rows: RATE_OPTIONS }]);
+}
+
+async function handleChooseRate(phone, input, data) {
+  const option = RATE_OPTIONS.find(o => o.id === input);
+  if (!option) { await sendText(phone, 'Please select an occasion from the list, or type *menu* to restart.'); return; }
+  const subId = option.id.replace('rate_', '');
+  if (RATE_SHEETS[subId]) {
+    await sendDocument(phone, RATE_SHEETS[subId], `${option.title} Rates.pdf`, `Here's our ${option.title} rate card 📄`);
+  } else {
+    await sendText(phone, `Our *${option.title}* rate sheet is coming soon — message us directly and we'll send you a quote! 🙏`);
+  }
+  await sendPostRatesPrompt(phone);
+  await saveSession(phone, 'POST_RATES', data);
+}
+
+async function sendPostRatesPrompt(phone) {
+  await sendButtons(phone,
+    'Would you like to make a booking, or are you just browsing for now? 😊',
+    [{ id: 'post_rates_book', title: '📅 Make a Booking' }, { id: 'post_rates_browse', title: '👀 Just Looking' }]
+  );
+}
+
+async function handlePostRates(phone, displayName, input, data) {
+  if (input === 'post_rates_book') {
+    await sendWelcome(phone, displayName);
+    await saveSession(phone, 'CHOOSE_SERVICE', { name: displayName });
+  } else if (input === 'post_rates_browse') {
+    await resetSession(phone);
+    await sendText(phone, "No worries — feel free to browse! Type *menu* anytime you'd like to see rates or make a booking. 👋");
+  } else {
+    await sendPostRatesPrompt(phone);
   }
 }
 
