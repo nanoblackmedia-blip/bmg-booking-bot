@@ -15,11 +15,6 @@ const RATE_SHEETS = {
 };
 
 const BOOKING_DATE_FLOW_ID = '908090289013623';
-const TIME_SLOT_LABELS = {
-  morning: 'Morning (8am - 12pm)',
-  afternoon: 'Afternoon (12pm - 4pm)',
-  evening: 'Evening (4pm - 7pm)',
-};
 
 // ─── Google Sheets ────────────────────────────────────────────────────────────
 async function appendToSheet(bookingId, data, phone) {
@@ -366,8 +361,7 @@ async function handleDate(phone, input, data) {
   if (input.startsWith('flow_reply:')) {
     try {
       const { booking_date, booking_time } = JSON.parse(input.slice('flow_reply:'.length));
-      const timeLabel = TIME_SLOT_LABELS[booking_time] || booking_time;
-      data.preferred_date = `${booking_date}, ${timeLabel}`;
+      data.preferred_date = `${booking_date}, ${booking_time}`;
     } catch(e) {
       await sendText(phone, "Sorry, we couldn't read that. Please pick a date from the calendar above, or type it instead.");
       return;
