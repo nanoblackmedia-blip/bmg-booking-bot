@@ -69,7 +69,6 @@ async function getDB() {
 const SERVICES = {
   svc_photo: '📸 Photography',
   svc_video: '🎬 Videography',
-  svc_pv:   '📸+🎬 Photo + Video',
 };
 
 const SUB_TYPES = {
@@ -82,16 +81,6 @@ const SUB_TYPES = {
   svc_video: [
     { id: 'sub_promo',     title: 'Promo / Ad Video',         description: 'Social media, TV spots' },
     { id: 'sub_corporate', title: 'Corporate Video',          description: 'Internal comms, training' },
-    { id: 'sub_event_vid', title: 'Event Filming',            description: 'Full event coverage' },
-    { id: 'sub_music',     title: 'Music Video',              description: 'Artists & labels' },
-  ],
-  svc_pv: [
-    { id: 'sub_md',        title: 'Matric Dance', description: 'Matric Dance shoots' },
-    { id: 'sub_portrait',  title: 'Portrait',    description: 'Studio' },
-    { id: 'sub_event',     title: 'Event Coverage',           description: 'Conferences, parties, launches, birthdays, dinners' },
-    { id: 'sub_product',   title: 'Brands',     description: 'For Brands who need content for Promo' },
-    { id: 'sub_promo',     title: 'Promo / Ads',         description: 'Social media, TV spots' },
-    { id: 'sub_corporate', title: 'Corporate',          description: 'Internal comms, training' },
     { id: 'sub_event_vid', title: 'Event Filming',            description: 'Full event coverage' },
     { id: 'sub_music',     title: 'Music Video',              description: 'Artists & labels' },
   ],
@@ -232,7 +221,6 @@ async function sendWelcome(phone, name) {
           buttons: [
             { type: 'reply', reply: { id: 'svc_photo', title: '📸 Photography' } },
             { type: 'reply', reply: { id: 'svc_video', title: '🎬 Videography' } },
-            { type: 'reply', reply: { id: 'svc_pv', title: '📸+🎬 Photo + Video' } },
           ],
         },
       },
