@@ -269,7 +269,7 @@ async function handleNotes(phone, input, data) {
 async function sendConfirmSummary(phone, data) {
   const notes = data.notes ? `\n📌 *Notes:* ${data.notes}` : '';
   await sendButtons(phone,
-    `✅ *Booking Summary*\n\n👤 *Name:* ${data.client_name}\n📧 *Email:* ${data.client_email}\n🎯 *Service:* ${data.service_label}\n📋 *Type:* ${data.subtype_label}\n📅 *Date:* ${data.preferred_date}${notes}\n\nShall we confirm?`,
+    `✅ *Booking Summary*\n\n👤 *Name:* ${data.client_name}\n📧 *Email:* ${data.client_email}\n🎯 *Service:* ${data.service_label}\n📋 *Type:* ${data.subtype_label}\n📅 *Date:* ${data.preferred_date}${notes}\n\n👉 Tap *✅ Confirm* below to send this request to us.`,
     [{ id: 'confirm_yes', title: '✅ Confirm' }, { id: 'confirm_edit', title: '✏️ Start Over' }, { id: 'confirm_cancel', title: '❌ Cancel' }]
   );
 }
@@ -321,7 +321,10 @@ try {
     await resetSession(phone); await sendText(phone, "No problem! Type *hi* to start over. 😊");
   } else if (input === 'confirm_cancel') {
     await resetSession(phone); await sendText(phone, "Cancelled. Type *hi* anytime to book with us! 👋");
-  } else { await sendConfirmSummary(phone, data); }
+  } else {
+    await sendText(phone, "I can't reply to typed messages at this step — please tap *✅ Confirm* below to send your request through (or *✏️ Start Over* / *❌ Cancel*).");
+    await sendConfirmSummary(phone, data);
+  }
 }
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
