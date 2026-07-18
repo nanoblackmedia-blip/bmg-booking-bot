@@ -204,10 +204,6 @@ async function sendWelcome(phone, name) {
       type: 'interactive',
       interactive: {
         type: 'button',
-        header: {
-          type: 'image',
-          image: { link: 'https://www.blackmeridian.co.za/images/header.jpg' },
-        },
         body: {
           text: `👋 Hey there ${name}! Welcome to the *Nanoblack Enquiry System!*\n\n> Built for our valued clients so their time is never wasted waiting on a reply.\n\nWhat would you like to enquire about today?`,
         },
