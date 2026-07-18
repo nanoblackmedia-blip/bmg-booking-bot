@@ -171,7 +171,7 @@ async function sendDatePickerFlow(to) {
       messaging_product: 'whatsapp', to, type: 'interactive',
       interactive: {
         type: 'flow',
-        body: { text: 'Tap below to pick your date and time from the calendar. 📅' },
+        body: { text: 'Tap below to pick your date and time from the calendar. 📅\n\nNot sure yet, or prefer to type it? Just send it as a message instead — e.g. _15 July 2026, 14:00_ or _"anytime in August"_.' },
         action: {
           name: 'flow',
           parameters: {
@@ -357,32 +357,26 @@ async function handleSubType(phone, input, data) {
   const sub = (SUB_TYPES[data.service] || []).find(s => s.id === input);
   if (!sub) { await sendText(phone, 'Please select an option from the list, or type *menu* to restart.'); return; }
   data.subtype = input; data.subtype_label = sub.title;
-  await sendButtons(phone,
-    `Perfect! *${sub.title}* — noted. 📝\n\nWhat date and time are you thinking?\n\n_Example: 15 July 2026, 14:00 or "anytime in August"_`,
-    [{ id: 'date_pick_flow', title: '🤔 Not Sure? Pick' }]
-  );
+  await sendText(phone, `Perfect! *${sub.title}* — noted. 📝`);
+  await sendDatePickerFlow(phone);
   await saveSession(phone, 'ENTER_DATE', data);
 }
 
 async function handleDate(phone, input, data) {
-  if (input === 'date_pick_flow') {
-    await sendDatePickerFlow(phone);
-    return;
-  }
   if (input.startsWith('flow_reply:')) {
     try {
       const { booking_date, booking_time } = JSON.parse(input.slice('flow_reply:'.length));
       const timeLabel = TIME_SLOT_LABELS[booking_time] || booking_time;
       data.preferred_date = `${booking_date}, ${timeLabel}`;
     } catch(e) {
-      await sendText(phone, "Sorry, we couldn't read that. Please enter a date and time, or tap *Not Sure? Pick* above.");
+      await sendText(phone, "Sorry, we couldn't read that. Please pick a date from the calendar above, or type it instead.");
       return;
     }
     await sendText(phone, `Got it — *${data.preferred_date}*. 📅\n\nWhat's your full name?`);
     await saveSession(phone, 'ENTER_NAME', data);
     return;
   }
-  if (input.trim().length < 3) { await sendText(phone, 'Please enter a date and time, or tap *Not Sure? Pick* above.'); return; }
+  if (input.trim().length < 3) { await sendText(phone, 'Please pick a date from the calendar above, or type a date and time.'); return; }
   data.preferred_date = input;
   await sendText(phone, `Got it — *${input}*. 📅\n\nWhat's your full name?`);
   await saveSession(phone, 'ENTER_NAME', data);
