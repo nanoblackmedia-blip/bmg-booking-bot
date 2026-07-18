@@ -360,8 +360,8 @@ async function handleSubType(phone, input, data) {
 async function handleDate(phone, input, data) {
   if (input.startsWith('flow_reply:')) {
     try {
-      const { booking_date, booking_time } = JSON.parse(input.slice('flow_reply:'.length));
-      data.preferred_date = `${booking_date}, ${booking_time}`;
+      const { booking_date, start_time, end_time } = JSON.parse(input.slice('flow_reply:'.length));
+      data.preferred_date = `${booking_date}, ${start_time} - ${end_time}`;
     } catch(e) {
       await sendText(phone, "Sorry, we couldn't read that. Please pick a date from the calendar above, or type it instead.");
       return;
