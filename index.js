@@ -14,15 +14,6 @@ const RATE_SHEETS = {
   sub_md: `${PUBLIC_BASE_URL}/rates/matric-dance-rates.pdf`,
 };
 
-const PACKAGES = {
-  sub_md: [
-    { id: 'pkg_entry',    title: 'Entry — R2000',    file: 'matric-dance-entry.pdf' },
-    { id: 'pkg_standard', title: 'Standard — R3000', file: 'matric-dance-standard.pdf' },
-    { id: 'pkg_halfday',  title: 'Half-Day — R5000', file: 'matric-dance-halfday.pdf' },
-    { id: 'pkg_fullday',  title: 'Full Day — R7000', file: 'matric-dance-fullday.pdf' },
-  ],
-};
-
 // ─── Google Sheets ────────────────────────────────────────────────────────────
 async function appendToSheet(bookingId, data, phone) {
   try {
@@ -217,7 +208,7 @@ async function handle(phone, displayName, input, msgType) {
     case 'START':          await sendMainMenu(phone, displayName); await saveSession(phone, 'MAIN_MENU', { name: displayName }); break;
     case 'MAIN_MENU':      await handleMainMenu(phone, displayName, input, data); break;
     case 'CHOOSE_RATE':    await handleChooseRate(phone, input, data); break;
-    case 'CHOOSE_PACKAGE': await handleChoosePackage(phone, input, data); break;
+    case 'ENTER_PACKAGE':  await handleEnterPackage(phone, input, data); break;
     case 'POST_RATES':     await handlePostRates(phone, displayName, input, data); break;
     case 'CHOOSE_SERVICE': await handleService(phone, input, data); break;
     case 'CHOOSE_SUBTYPE': await handleSubType(phone, input, data); break;
@@ -257,30 +248,20 @@ async function handleChooseRate(phone, input, data) {
   const option = RATE_OPTIONS.find(o => o.id === input);
   if (!option) { await sendText(phone, 'Please select an occasion from the list, or type *menu* to restart.'); return; }
   const subId = option.id.replace('rate_', '');
-  if (PACKAGES[subId]) {
-    await sendPackageList(phone, subId, option.title);
-    await saveSession(phone, 'CHOOSE_PACKAGE', { ...data, rate_subId: subId, rate_label: option.title });
-    return;
-  }
   if (RATE_SHEETS[subId]) {
     await sendDocument(phone, RATE_SHEETS[subId], `${option.title} Rates.pdf`, `Here's our ${option.title} rate card 📄`);
-  } else {
-    await sendText(phone, `Our *${option.title}* rate sheet is coming soon — message us directly and we'll send you a quote! 🙏`);
+    await sendText(phone, 'Which package are you interested in? (e.g. Entry, Standard, Half-Day, Full Day)');
+    await saveSession(phone, 'ENTER_PACKAGE', { ...data, rate_label: option.title });
+    return;
   }
+  await sendText(phone, `Our *${option.title}* rate sheet is coming soon — message us directly and we'll send you a quote! 🙏`);
   await sendPostRatesPrompt(phone);
   await saveSession(phone, 'POST_RATES', data);
 }
 
-async function sendPackageList(phone, subId, occasionLabel) {
-  const rows = PACKAGES[subId].map(p => ({ id: p.id, title: p.title }));
-  await sendList(phone, `Which *${occasionLabel}* package would you like rates for?`, 'View Packages', [{ title: 'Select a Package', rows }]);
-}
-
-async function handleChoosePackage(phone, input, data) {
-  const packages = PACKAGES[data.rate_subId] || [];
-  const pkg = packages.find(p => p.id === input);
-  if (!pkg) { await sendText(phone, 'Please select a package from the list, or type *menu* to restart.'); return; }
-  await sendDocument(phone, `${PUBLIC_BASE_URL}/rates/${pkg.file}`, `${data.rate_label} ${pkg.title}.pdf`, `Here's our ${data.rate_label} — ${pkg.title} rate card 📄`);
+async function handleEnterPackage(phone, input, data) {
+  if (input.trim().length < 2) { await sendText(phone, "Please let us know which package you're interested in."); return; }
+  data.rate_package = input;
   await sendPostRatesPrompt(phone);
   await saveSession(phone, 'POST_RATES', data);
 }
@@ -342,12 +323,21 @@ async function handleSubType(phone, input, data) {
   const sub = (SUB_TYPES[data.service] || []).find(s => s.id === input);
   if (!sub) { await sendText(phone, 'Please select an option from the list, or type *menu* to restart.'); return; }
   data.subtype = input; data.subtype_label = sub.title;
-  await sendText(phone, `Perfect! *${sub.title}* — noted. 📝\n\nWhat date(s) are you thinking?\n\n_Example: 15 July 2026 or "anytime in August"_`);
+  await sendButtons(phone,
+    `Perfect! *${sub.title}* — noted. 📝\n\nWhat date and time are you thinking?\n\n_Example: 15 July 2026, 14:00 or "anytime in August"_`,
+    [{ id: 'date_not_sure', title: '🤔 Not Sure Yet' }]
+  );
   await saveSession(phone, 'ENTER_DATE', data);
 }
 
 async function handleDate(phone, input, data) {
-  if (input.trim().length < 3) { await sendText(phone, 'Please enter a date or timeframe.'); return; }
+  if (input === 'date_not_sure') {
+    data.preferred_date = 'To be confirmed';
+    await sendText(phone, "No problem! We'll sort out a date and time with you directly. 😊\n\nWhat's your full name?");
+    await saveSession(phone, 'ENTER_NAME', data);
+    return;
+  }
+  if (input.trim().length < 3) { await sendText(phone, 'Please enter a date and time, or tap *Not Sure Yet* above.'); return; }
   data.preferred_date = input;
   await sendText(phone, `Got it — *${input}*. 📅\n\nWhat's your full name?`);
   await saveSession(phone, 'ENTER_NAME', data);
@@ -363,7 +353,7 @@ async function handleName(phone, input, data) {
 async function handleEmail(phone, input, data) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input)) { await sendText(phone, "That doesn't look valid. Try again — e.g. _name@gmail.com_"); return; }
   data.client_email = input;
-  await sendText(phone, 'Almost done! Please enter the location and timeslot\n\n_Type *skip* if none._');
+  await sendText(phone, 'Almost done! Please enter the location\n\n_Type *skip* if none._');
   await saveSession(phone, 'ENTER_NOTES', data);
 }
 
