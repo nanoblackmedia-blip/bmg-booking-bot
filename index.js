@@ -5,8 +5,14 @@ const { google } = require('googleapis');
 
 const app = express();
 app.use(express.json());
+app.use('/rates', express.static('public/rates'));
 
 const WA_API = `https://graph.facebook.com/v19.0/${process.env.WA_PHONE_NUMBER_ID}/messages`;
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || 'https://bmg-booking-bot-production.up.railway.app';
+
+const RATE_SHEETS = {
+  sub_md: `${PUBLIC_BASE_URL}/rates/matric-dance-rates.pdf`,
+};
 
 // ─── Google Sheets ────────────────────────────────────────────────────────────
 async function appendToSheet(bookingId, data, phone) {
@@ -68,7 +74,8 @@ const SERVICES = {
 
 const SUB_TYPES = {
   svc_photo: [
-    { id: 'sub_portrait',  title: 'Portrait',    description: 'Matric Dance, Studio' },
+    { id: 'sub_md',        title: 'Matric Dance', description: 'Matric Dance shoots' },
+    { id: 'sub_portrait',  title: 'Portrait',    description: 'Studio' },
     { id: 'sub_event',     title: 'Event Coverage',           description: 'Conferences, parties, launches, birthdays, dinners' },
     { id: 'sub_product',   title: 'Brands',     description: 'For Brands who need content for Promo' },
   ],
@@ -79,7 +86,8 @@ const SUB_TYPES = {
     { id: 'sub_music',     title: 'Music Video',              description: 'Artists & labels' },
   ],
   svc_pv: [
-    { id: 'sub_portrait',  title: 'Portrait',    description: 'Matric Dance, Studio' },
+    { id: 'sub_md',        title: 'Matric Dance', description: 'Matric Dance shoots' },
+    { id: 'sub_portrait',  title: 'Portrait',    description: 'Studio' },
     { id: 'sub_event',     title: 'Event Coverage',           description: 'Conferences, parties, launches, birthdays, dinners' },
     { id: 'sub_product',   title: 'Brands',     description: 'For Brands who need content for Promo' },
     { id: 'sub_promo',     title: 'Promo / Ads',         description: 'Social media, TV spots' },
@@ -133,6 +141,19 @@ async function sendList(to, body, buttonLabel, sections) {
     console.log(`sendList OK to ${to}`);
   } catch(e) {
     console.error('sendList error:', e.response?.data || e.message);
+  }
+}
+
+async function sendDocument(to, link, filename, caption = '') {
+  try {
+    console.log(`Sending document to ${to}`);
+    await axios.post(WA_API, {
+      messaging_product: 'whatsapp', to, type: 'document',
+      document: { link, filename, caption },
+    }, { headers: { Authorization: `Bearer ${process.env.WA_ACCESS_TOKEN}` }, timeout: WA_TIMEOUT_MS });
+    console.log(`sendDocument OK to ${to}`);
+  } catch(e) {
+    console.error('sendDocument error:', e.response?.data || e.message);
   }
 }
 
@@ -285,6 +306,9 @@ async function handleConfirm(phone, input, data) {
       );
       await sendText(phone, `🎉 *Request Sent!*\n\nThanks *${data.client_name}* — we'll be in touch within 24 hours.\n\n📋 *Reference:* #BMG-${result.insertId}\n\nType *menu* to make another booking. 🙏`);
       await saveSession(phone, 'DONE', data);
+      if (RATE_SHEETS[data.subtype]) {
+        await sendDocument(phone, RATE_SHEETS[data.subtype], `${data.subtype_label} Rates.pdf`, `Here's our ${data.subtype_label} rate card 📄`);
+      }
     // Send admin notification via approved template
 try {
   await axios.post(WA_API, {
