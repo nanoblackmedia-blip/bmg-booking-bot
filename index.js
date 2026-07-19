@@ -11,7 +11,14 @@ const WA_API = `https://graph.facebook.com/v19.0/${process.env.WA_PHONE_NUMBER_I
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || 'https://bmg-booking-bot-production.up.railway.app';
 
 const RATE_SHEETS = {
-  sub_md: `${PUBLIC_BASE_URL}/rates/matric-dance-rates.pdf`,
+  sub_md:        `${PUBLIC_BASE_URL}/rates/matric-dance-rates.pdf`,
+  sub_portrait:  `${PUBLIC_BASE_URL}/rates/portrait-rates.pdf`,
+  sub_event:     `${PUBLIC_BASE_URL}/rates/event-coverage-rates.pdf`,
+  sub_product:   `${PUBLIC_BASE_URL}/rates/brands-rates.pdf`,
+  sub_promo:     `${PUBLIC_BASE_URL}/rates/promo-ad-video-rates.pdf`,
+  sub_corporate: `${PUBLIC_BASE_URL}/rates/corporate-video-rates.pdf`,
+  sub_event_vid: `${PUBLIC_BASE_URL}/rates/event-filming-rates.pdf`,
+  sub_music:     `${PUBLIC_BASE_URL}/rates/music-video-rates.pdf`,
 };
 
 const BOOKING_DATE_FLOW_ID = '908090289013623';
