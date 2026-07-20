@@ -19,6 +19,7 @@ const RATE_SHEETS = {
   sub_corporate: `${PUBLIC_BASE_URL}/rates/corporate-video-rates.pdf`,
   sub_event_vid: `${PUBLIC_BASE_URL}/rates/event-filming-rates.pdf`,
   sub_music:     `${PUBLIC_BASE_URL}/rates/music-video-rates.pdf`,
+  sub_wedding:   `${PUBLIC_BASE_URL}/rates/wedding-rates.pdf`,
 };
 
 const BOOKING_DATE_FLOW_ID = '908090289013623';
@@ -84,6 +85,7 @@ const SUB_TYPES = {
   svc_photo: [
     { id: 'sub_md',        title: 'Matric Dance', description: 'Matric Dance shoots' },
     { id: 'sub_portrait',  title: 'Portrait',    description: 'Studio' },
+    { id: 'sub_wedding',   title: 'Wedding',     description: 'Wedding day coverage' },
     { id: 'sub_event',     title: 'Event Coverage',           description: 'Conferences, parties, launches, birthdays, dinners' },
     { id: 'sub_product',   title: 'Brands',     description: 'For Brands who need content for Promo' },
   ],
@@ -96,15 +98,18 @@ const SUB_TYPES = {
 };
 
 const RATE_OPTIONS = [
-  { id: 'rate_sub_md',        title: 'Matric Dance',     description: 'Matric Dance shoots' },
-  { id: 'rate_sub_portrait',  title: 'Portrait',         description: 'Studio' },
-  { id: 'rate_sub_event',     title: 'Event Coverage',   description: 'Conferences, parties, launches, birthdays, dinners' },
-  { id: 'rate_sub_product',   title: 'Brands',           description: 'For Brands who need content for Promo' },
-  { id: 'rate_sub_promo',     title: 'Promo / Ad Video', description: 'Social media, TV spots' },
-  { id: 'rate_sub_corporate', title: 'Corporate Video',  description: 'Internal comms, training' },
-  { id: 'rate_sub_event_vid', title: 'Event Filming',    description: 'Full event coverage' },
-  { id: 'rate_sub_music',     title: 'Music Video',      description: 'Artists & labels' },
+  { id: 'rate_sub_md',       title: 'Matric Dance',   description: 'Matric Dance shoots' },
+  { id: 'rate_sub_portrait', title: 'Portrait',       description: 'Studio' },
+  { id: 'rate_sub_wedding',  title: 'Wedding',        description: 'Wedding day coverage' },
+  { id: 'rate_other',        title: 'Other Sessions', description: 'Events, Brands, Promo, Corporate, Music & Event Filming' },
 ];
+
+// which service each subtype belongs to (lets bookings skip re-selecting)
+const SUB_SERVICE = {
+  sub_md: 'svc_photo', sub_portrait: 'svc_photo', sub_wedding: 'svc_photo',
+  sub_event: 'svc_photo', sub_product: 'svc_photo',
+  sub_promo: 'svc_video', sub_corporate: 'svc_video', sub_event_vid: 'svc_video', sub_music: 'svc_video',
+};
 
 // ─── WhatsApp API ─────────────────────────────────────────────────────────────
 const WA_TIMEOUT_MS = 10000;
@@ -281,18 +286,24 @@ async function sendRatesList(phone) {
 }
 
 async function handleChooseRate(phone, input, data) {
+  if (input === 'rate_other') {
+    await sendText(phone, `For *Event Coverage, Brands, Promo / Ad Videos, Corporate Videos, Event Filming & Music Videos*, rates are tailored to your project. \u{1F4BC}\n\nPlease email us at *Info@blackmeridian.co.za* and we'll send you a custom quote within 24 hours. \u{1F4E7}`);
+    await sendPostRatesPrompt(phone);
+    await saveSession(phone, 'POST_RATES', data);
+    return;
+  }
   const option = RATE_OPTIONS.find(o => o.id === input);
   if (!option) { await sendText(phone, 'Please select an occasion from the list, or type *menu* to restart.'); return; }
   const subId = option.id.replace('rate_', '');
-  if (RATE_SHEETS[subId]) {
-    await sendDocument(phone, RATE_SHEETS[subId], `${option.title} Rates.pdf`, `Here's our ${option.title} rate card 📄`);
-    await sendText(phone, 'Which package are you interested in? (e.g. Entry, Standard, Half-Day, Full Day)');
-    await saveSession(phone, 'ENTER_PACKAGE', { ...data, rate_label: option.title });
-    return;
-  }
-  await sendText(phone, `Our *${option.title}* rate sheet is coming soon — message us directly and we'll send you a quote! 🙏`);
-  await sendPostRatesPrompt(phone);
-  await saveSession(phone, 'POST_RATES', data);
+  await sendDocument(phone, RATE_SHEETS[subId], `${option.title} Rates.pdf`, `Here's our ${option.title} rate card \u{1F4C4}`);
+  await sendText(phone, 'Which package are you interested in? (e.g. Entry, Standard, Half-Day, Full Day)');
+  const service = SUB_SERVICE[subId];
+  await saveSession(phone, 'ENTER_PACKAGE', {
+    ...data,
+    rate_label: option.title,
+    service, service_label: SERVICES[service],
+    subtype: subId, subtype_label: option.title,
+  });
 }
 
 async function handleEnterPackage(phone, input, data) {
@@ -311,11 +322,17 @@ async function sendPostRatesPrompt(phone) {
 
 async function handlePostRates(phone, displayName, input, data) {
   if (input === 'post_rates_book') {
-    await sendWelcome(phone, displayName);
-    await saveSession(phone, 'CHOOSE_SERVICE', { name: displayName });
+    if (data.subtype) {
+      await sendText(phone, `Great! Let's book your *${data.subtype_label}* session. \u{1F389}`);
+      await sendDatePickerFlow(phone);
+      await saveSession(phone, 'ENTER_DATE', data);
+    } else {
+      await sendWelcome(phone, displayName);
+      await saveSession(phone, 'CHOOSE_SERVICE', { name: displayName });
+    }
   } else if (input === 'post_rates_browse') {
     await resetSession(phone);
-    await sendText(phone, "No worries — feel free to browse! Type *menu* anytime you'd like to see rates or make a booking. 👋");
+    await sendText(phone, `Thanks for stopping by! \u{1F64F} We'd love to capture your next big moment.\n\n\u{2728} When you're ready, just type *menu* and we'll get you booked in seconds. See you soon! \u{1F44B}`);
   } else {
     await sendPostRatesPrompt(phone);
   }
