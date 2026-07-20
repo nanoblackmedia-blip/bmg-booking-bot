@@ -34,7 +34,9 @@ async function handleAdminCommand(adminPhone, action, bookingId) {
     const booking = rows[0];
     if (action === 'confirm') {
       await pool.query('UPDATE wa_bookings SET status = ? WHERE id = ?', ['confirmed', bookingId]);
-      await sendText(booking.phone, `\u{1F389} *Booking Confirmed!*\n\nHi ${booking.client_name}, your *${booking.subtype_label}* booking for *${booking.preferred_date}* is confirmed. \u2705\n\n\u{1F4CB} Reference: #BMG-${bookingId}\n\nWe can't wait to work with you! If you have any questions, just reply here.`);
+      const ref = `BMG-${String(bookingId).padStart(4, '0')}`;
+      await sendText(booking.phone, `\u{1F389} *Booking Confirmed!*\n\nHi ${booking.client_name}, your *${booking.subtype_label}* booking for *${booking.preferred_date}* is confirmed. \u2705\n\n\u{1F4CB} Reference: #${ref}\n\nWe can't wait to work with you! If you have any questions, just reply here.`);
+      await sendText(booking.phone, `\u{1F4B0} *Reserve Your Spot*\n\nA *50% deposit* is required to secure your booking.\n\n\u{1F3E6} *Account name:* Black Meridian Group\n\u{1F3E6} *Bank:* FNB/RMB\n\u{1F522} *Account no.:* 63202712899\n\u{1F3E2} *Branch code:* 255355\n\u{1F4DD} *Reference:* ${ref}\n\n\u26A0\uFE0F Please use the reference above so we can match your payment. Once we receive it, your spot is locked in! \u{1F512}`);
       await sendText(adminPhone, `\u2705 Booking #BMG-${bookingId} confirmed. Client notified.`);
     } else {
       await pool.query('UPDATE wa_bookings SET status = ? WHERE id = ?', ['declined', bookingId]);
