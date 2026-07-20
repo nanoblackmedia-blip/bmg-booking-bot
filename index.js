@@ -23,6 +23,29 @@ const RATE_SHEETS = {
 };
 
 const BOOKING_DATE_FLOW_ID = '908090289013623';
+const ADMIN_PHONE = '27650767631';
+
+// ─── Admin accept/decline ──────────────────────────────────────────────────────
+async function handleAdminCommand(adminPhone, action, bookingId) {
+  try {
+    const pool = await getDB();
+    const [rows] = await pool.query('SELECT * FROM wa_bookings WHERE id = ?', [bookingId]);
+    if (!rows.length) { await sendText(adminPhone, `\u26A0\uFE0F Booking #BMG-${bookingId} not found.`); return; }
+    const booking = rows[0];
+    if (action === 'confirm') {
+      await pool.query('UPDATE wa_bookings SET status = ? WHERE id = ?', ['confirmed', bookingId]);
+      await sendText(booking.phone, `\u{1F389} *Booking Confirmed!*\n\nHi ${booking.client_name}, your *${booking.subtype_label}* booking for *${booking.preferred_date}* is confirmed. \u2705\n\n\u{1F4CB} Reference: #BMG-${bookingId}\n\nWe can't wait to work with you! If you have any questions, just reply here.`);
+      await sendText(adminPhone, `\u2705 Booking #BMG-${bookingId} confirmed. Client notified.`);
+    } else {
+      await pool.query('UPDATE wa_bookings SET status = ? WHERE id = ?', ['declined', bookingId]);
+      await sendText(booking.phone, `Hi ${booking.client_name}, unfortunately we're unable to accommodate your *${booking.subtype_label}* request for *${booking.preferred_date}*. \u{1F64F}\n\nPlease reply here or type *menu* to pick a different date \u2014 we'd still love to work with you!`);
+      await sendText(adminPhone, `\u274C Booking #BMG-${bookingId} declined. Client notified.`);
+    }
+  } catch(e) {
+    console.error('handleAdminCommand error:', e.message);
+    await sendText(adminPhone, 'Something went wrong processing that command.');
+  }
+}
 
 // ─── Google Sheets ────────────────────────────────────────────────────────────
 async function appendToSheet(bookingId, data, phone) {
@@ -511,6 +534,10 @@ app.post('/webhook', async (req, res) => {
       if (iType === 'nfm_reply')    input = `flow_reply:${message.interactive.nfm_reply?.response_json || '{}'}`;
     }
     console.log(`MSG from ${phone}: "${input}" (${msgType})`);
+    if (phone === ADMIN_PHONE) {
+      const m = input.match(/^(confirm|decline)\s+#?(?:BMG-)?(\d+)$/i);
+      if (m) { await handleAdminCommand(phone, m[1].toLowerCase(), m[2]); return; }
+    }
     await handle(phone, displayName, input, msgType);
   } catch(e) { console.error('Webhook error:', e.message); }
 });
