@@ -36,7 +36,7 @@ async function handleAdminCommand(adminPhone, action, bookingId) {
       await pool.query('UPDATE wa_bookings SET status = ? WHERE id = ?', ['confirmed', bookingId]);
       const ref = `BMG-${String(bookingId).padStart(4, '0')}`;
       await sendText(booking.phone, `\u{1F389} *Booking Confirmed!*\n\nHi ${booking.client_name}, your *${booking.subtype_label}* booking for *${booking.preferred_date}* is confirmed. \u2705\n\n\u{1F4CB} Reference: #${ref}\n\nWe can't wait to work with you! If you have any questions, just reply here.`);
-      await sendText(booking.phone, `\u{1F4B0} *Reserve Your Spot*\n\nA *50% deposit* is required to secure your booking.\n\n\u{1F3E6} *Account name:* Black Meridian Group\n\u{1F3E6} *Bank:* FNB/RMB\n\u{1F522} *Account no.:* 63202712899\n\u{1F3E2} *Branch code:* 255355\n\u{1F4DD} *Reference:* ${ref}\n\n\u26A0\uFE0F Please use the reference above so we can match your payment. Once we receive it, your spot is locked in! \u{1F512}`);
+      await sendText(booking.phone, `\u{1F4B0} *Reserve Your Spot*\n\nA *50% deposit* is required to secure your booking.\n\n\u{1F3E6} *Account name:* Black Meridian Group\n\u{1F3E6} *Bank:* FNB/RMB\n\u{1F522} *Account no.:* 63202712899\n\u{1F3E2} *Branch code:* 255355\n\u{1F4DD} *Reference:* ${ref}\n\n\u26A0\uFE0F Please use the reference above so we can match your payment. Once we receive it, your spot is locked in! \u{1F512}\n\n\u{1F4DE} I'll personally give you a call on our business number for a quick care call before your session.`);
       await sendText(adminPhone, `\u2705 Booking #BMG-${bookingId} confirmed. Client notified.`);
     } else {
       await pool.query('UPDATE wa_bookings SET status = ? WHERE id = ?', ['declined', bookingId]);
@@ -289,8 +289,8 @@ async function handle(phone, displayName, input, msgType) {
 
 async function sendMainMenu(phone, name) {
   await sendButtons(phone,
-    `👋 Hey there ${name}! Welcome to the *Nanoblack Enquiry System!*\n\n> Built for our valued clients so their time is never wasted waiting on a reply.\n\nWould you like to view our rates, or go ahead and make a booking?`,
-    [{ id: 'menu_rates', title: '📄 View Rates' }, { id: 'menu_book', title: '📅 Make a Booking' }]
+    `👋 Hey there ${name}! Welcome to the *Nanoblack Enquiry System!*\n\n> Built for our valued clients so their time is never wasted waiting on a reply.\n\nWould you like to view our rates, or go ahead and make an enquiry?`,
+    [{ id: 'menu_rates', title: '📄 Enquire (View Rates)' }, { id: 'menu_book', title: '📅 Make an Enquiry' }]
   );
 }
 
@@ -340,15 +340,15 @@ async function handleEnterPackage(phone, input, data) {
 
 async function sendPostRatesPrompt(phone) {
   await sendButtons(phone,
-    'Would you like to make a booking, or are you just browsing for now? 😊',
-    [{ id: 'post_rates_book', title: '📅 Make a Booking' }, { id: 'post_rates_browse', title: '👀 Just Looking' }]
+    'Would you like to make an enquiry, or are you just browsing for now? 😊',
+    [{ id: 'post_rates_book', title: '📅 Make an Enquiry' }, { id: 'post_rates_browse', title: '👀 Just Looking' }]
   );
 }
 
 async function handlePostRates(phone, displayName, input, data) {
   if (input === 'post_rates_book') {
     if (data.subtype) {
-      await sendText(phone, `Great! Let's book your *${data.subtype_label}* session. \u{1F389}`);
+      await sendText(phone, `Great! Let's get your *${data.subtype_label}* enquiry started. \u{1F389}`);
       await sendDatePickerFlow(phone);
       await saveSession(phone, 'ENTER_DATE', data);
     } else {
@@ -357,7 +357,7 @@ async function handlePostRates(phone, displayName, input, data) {
     }
   } else if (input === 'post_rates_browse') {
     await resetSession(phone);
-    await sendText(phone, `Thanks for stopping by! \u{1F64F} We'd love to capture your next big moment.\n\n\u{2728} When you're ready, just type *menu* and we'll get you booked in seconds. See you soon! \u{1F44B}`);
+    await sendText(phone, `Thanks for stopping by! \u{1F64F} We'd love to capture your next big moment.\n\n\u{2728} When you're ready, just type *menu* and we'll get your enquiry sent in seconds. See you soon! \u{1F44B}`);
   } else {
     await sendPostRatesPrompt(phone);
   }
@@ -448,7 +448,7 @@ async function handleNotes(phone, input, data) {
 async function sendConfirmSummary(phone, data) {
   const notes = data.notes ? `\n📌 *Notes:* ${data.notes}` : '';
   await sendButtons(phone,
-    `✅ *Booking Summary*\n\n👤 *Name:* ${data.client_name}\n📧 *Email:* ${data.client_email}\n🎯 *Service:* ${data.service_label}\n📋 *Type:* ${data.subtype_label}\n📅 *Date:* ${data.preferred_date}${notes}\n\n👉 Tap *✅ Confirm* below to send this request to us.`,
+    `✅ *Enquiry/Booking Summary*\n\n👤 *Name:* ${data.client_name}\n📧 *Email:* ${data.client_email}\n🎯 *Service:* ${data.service_label}\n📋 *Type:* ${data.subtype_label}\n📅 *Date:* ${data.preferred_date}${notes}\n\n👉 Please make sure these details are correct, then tap *✅ Confirm* to send your request.`,
     [{ id: 'confirm_yes', title: '✅ Confirm' }, { id: 'confirm_edit', title: '✏️ Start Over' }, { id: 'confirm_cancel', title: '❌ Cancel' }]
   );
 }
@@ -462,7 +462,7 @@ async function handleConfirm(phone, input, data) {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
         [phone, data.client_name, data.client_email, data.service, data.service_label, data.subtype, data.subtype_label, data.preferred_date, data.notes || '']
       );
-      await sendText(phone, `🎉 *Request Sent!*\n\nThanks *${data.client_name}* — we'll be in touch within 24 hours.\n\n📋 *Reference:* #BMG-${result.insertId}\n\nType *menu* to make another booking. 🙏`);
+      await sendText(phone, `🎉 *Request Sent!*\n\nWe'll be in touch in regards to the availability of your request. 📅\n\nThanks *${data.client_name}* — we'll be in touch within 24 hours.\n\n📋 *Reference:* #BMG-${result.insertId}\n\nType *menu* to make another enquiry. 🙏`);
       await saveSession(phone, 'DONE', data);
     // Send admin notification via approved template
 try {
@@ -499,7 +499,7 @@ try {
   } else if (input === 'confirm_edit') {
     await resetSession(phone); await sendText(phone, "No problem! Type *hi* to start over. 😊");
   } else if (input === 'confirm_cancel') {
-    await resetSession(phone); await sendText(phone, "Cancelled. Type *hi* anytime to book with us! 👋");
+    await resetSession(phone); await sendText(phone, "Cancelled. Type *hi* anytime to enquire with us! 👋");
   } else {
     await sendText(phone, "I can't reply to typed messages at this step — please tap *✅ Confirm* below to send your request through (or *✏️ Start Over* / *❌ Cancel*).");
     await sendConfirmSummary(phone, data);
