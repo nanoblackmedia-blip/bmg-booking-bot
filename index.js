@@ -464,9 +464,6 @@ async function handleConfirm(phone, input, data) {
       );
       await sendText(phone, `🎉 *Request Sent!*\n\nThanks *${data.client_name}* — we'll be in touch within 24 hours.\n\n📋 *Reference:* #BMG-${result.insertId}\n\nType *menu* to make another booking. 🙏`);
       await saveSession(phone, 'DONE', data);
-      if (RATE_SHEETS[data.subtype]) {
-        await sendDocument(phone, RATE_SHEETS[data.subtype], `${data.subtype_label} Rates.pdf`, `Here's our ${data.subtype_label} rate card 📄`);
-      }
     // Send admin notification via approved template
 try {
   await axios.post(WA_API, {
