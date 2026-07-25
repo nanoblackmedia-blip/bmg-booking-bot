@@ -290,7 +290,7 @@ async function handle(phone, displayName, input, msgType) {
 async function sendMainMenu(phone, name) {
   await sendButtons(phone,
     `👋 Hey there ${name}! Welcome to the *Nanoblack Enquiry System!*\n\n> Built for our valued clients so their time is never wasted waiting on a reply.\n\nWould you like to view our rates, or go ahead and make an enquiry?`,
-    [{ id: 'menu_rates', title: '📄 Enquire (View Rates)' }, { id: 'menu_book', title: '📅 Make an Enquiry' }]
+    [{ id: 'menu_rates', title: '📄Enquire - View Rates' }, { id: 'menu_book', title: '📅 Make an Enquiry' }]
   );
 }
 
