@@ -253,7 +253,7 @@ async function handle(phone, displayName, input, msgType) {
 
 async function sendMainMenu(phone, name) {
   await sendButtons(phone,
-    `👋 Hi ${name}! Welcome to *Black Meridian Group* 🎓📸\n\nHair, makeup, dress, jewellery — stunning. But who's capturing it? That's where we come in! 📸✨\n\nTap below to see our packages or reserve your date! 👇`,
+    `👋 Hi ${name}! Welcome to *Nanoblack Photo | Video* by *BMG Systems* 🎓📸\n\nHair, makeup, dress, jewellery — stunning. But who's capturing it? That's where we come in! 📸✨\n\nTap below to see our packages or reserve your date! 👇`,
     [{ id: 'menu_rates', title: '📦 View Packages' }, { id: 'menu_book', title: '📅 Make an Enquiry' }],
     BANNER_URL
   );
