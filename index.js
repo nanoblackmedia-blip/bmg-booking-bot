@@ -17,6 +17,7 @@ const RATE_SHEETS = {
 const SERVICE_LABEL = '📸 Photography';
 const SUBTYPE_ID = 'sub_md';
 const SUBTYPE_LABEL = 'Matric Dance';
+const BANNER_URL = `${PUBLIC_BASE_URL}/rates/MD%20BANNER.jpg`;
 
 const BOOKING_DATE_FLOW_ID = '908090289013623';
 const ADMIN_PHONE = '27650767631';
@@ -121,7 +122,13 @@ async function sendButtons(to, body, buttons, header = '') {
         action: { buttons: buttons.slice(0, 3).map(b => ({ type: 'reply', reply: { id: b.id, title: b.title.substring(0, 20) } })) },
       },
     };
-    if (header) payload.interactive.header = { type: 'text', text: header };
+    if (header) {
+      if (/^https?:\/\//.test(header)) {
+        payload.interactive.header = { type: 'image', image: { link: header } };
+      } else {
+        payload.interactive.header = { type: 'text', text: header };
+      }
+    }
     console.log(`Sending buttons to ${to}`);
     await axios.post(WA_API, payload, { headers: { Authorization: `Bearer ${process.env.WA_ACCESS_TOKEN}` }, timeout: WA_TIMEOUT_MS });
     console.log(`sendButtons OK to ${to}`);
@@ -247,7 +254,8 @@ async function handle(phone, displayName, input, msgType) {
 async function sendMainMenu(phone, name) {
   await sendButtons(phone,
     `👋 Hi ${name}! Welcome to *Black Meridian Group* 🎓📸\n\nWe'd love to capture your Matric Dance night. Ready to take a look? ✨`,
-    [{ id: 'menu_rates', title: '📦 View Packages' }, { id: 'menu_book', title: '📅 Make an Enquiry' }]
+    [{ id: 'menu_rates', title: '📦 View Packages' }, { id: 'menu_book', title: '📅 Make an Enquiry' }],
+    BANNER_URL
   );
 }
 
