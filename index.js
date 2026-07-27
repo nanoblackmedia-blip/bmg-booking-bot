@@ -11,16 +11,12 @@ const WA_API = `https://graph.facebook.com/v19.0/${process.env.WA_PHONE_NUMBER_I
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || 'https://bmg-booking-bot-production.up.railway.app';
 
 const RATE_SHEETS = {
-  sub_md:        `${PUBLIC_BASE_URL}/rates/matric-dance-rates.pdf`,
-  sub_portrait:  `${PUBLIC_BASE_URL}/rates/portrait-rates.pdf`,
-  sub_event:     `${PUBLIC_BASE_URL}/rates/event-coverage-rates.pdf`,
-  sub_product:   `${PUBLIC_BASE_URL}/rates/brands-rates.pdf`,
-  sub_promo:     `${PUBLIC_BASE_URL}/rates/promo-ad-video-rates.pdf`,
-  sub_corporate: `${PUBLIC_BASE_URL}/rates/corporate-video-rates.pdf`,
-  sub_event_vid: `${PUBLIC_BASE_URL}/rates/event-filming-rates.pdf`,
-  sub_music:     `${PUBLIC_BASE_URL}/rates/music-video-rates.pdf`,
-  sub_wedding:   `${PUBLIC_BASE_URL}/rates/wedding-rates.pdf`,
+  sub_md: `${PUBLIC_BASE_URL}/rates/matric-dance-rates.pdf`,
 };
+
+const SERVICE_LABEL = '📸 Photography';
+const SUBTYPE_ID = 'sub_md';
+const SUBTYPE_LABEL = 'Matric Dance';
 
 const BOOKING_DATE_FLOW_ID = '908090289013623';
 const ADMIN_PHONE = '27650767631';
@@ -99,42 +95,6 @@ async function getDB() {
   }
   return db;
 }
-
-// ─── Services ─────────────────────────────────────────────────────────────────
-const SERVICES = {
-  svc_photo: '📸 Photography',
-  svc_video: '🎬 Videography',
-};
-
-const SUB_TYPES = {
-  svc_photo: [
-    { id: 'sub_md',        title: 'Matric Dance', description: 'Matric Dance shoots' },
-    { id: 'sub_portrait',  title: 'Portrait',    description: 'Studio' },
-    { id: 'sub_wedding',   title: 'Wedding',     description: 'Wedding day coverage' },
-    { id: 'sub_event',     title: 'Event Coverage',           description: 'Conferences, parties, launches, birthdays, dinners' },
-    { id: 'sub_product',   title: 'Brands',     description: 'For Brands who need content for Promo' },
-  ],
-  svc_video: [
-    { id: 'sub_promo',     title: 'Promo / Ad Video',         description: 'Social media, TV spots' },
-    { id: 'sub_corporate', title: 'Corporate Video',          description: 'Internal comms, training' },
-    { id: 'sub_event_vid', title: 'Event Filming',            description: 'Full event coverage' },
-    { id: 'sub_music',     title: 'Music Video',              description: 'Artists & labels' },
-  ],
-};
-
-const RATE_OPTIONS = [
-  { id: 'rate_sub_md',       title: 'Matric Dance',   description: 'Matric Dance shoots' },
-  { id: 'rate_sub_portrait', title: 'Portrait',       description: 'Studio' },
-  { id: 'rate_sub_wedding',  title: 'Wedding',        description: 'Wedding day coverage' },
-  { id: 'rate_other',        title: 'Other Sessions', description: 'Events, Brands, Promo, Corporate, Music & Event Filming' },
-];
-
-// which service each subtype belongs to (lets bookings skip re-selecting)
-const SUB_SERVICE = {
-  sub_md: 'svc_photo', sub_portrait: 'svc_photo', sub_wedding: 'svc_photo',
-  sub_event: 'svc_photo', sub_product: 'svc_photo',
-  sub_promo: 'svc_video', sub_corporate: 'svc_video', sub_event_vid: 'svc_video', sub_music: 'svc_video',
-};
 
 // ─── WhatsApp API ─────────────────────────────────────────────────────────────
 const WA_TIMEOUT_MS = 10000;
@@ -273,11 +233,8 @@ async function handle(phone, displayName, input, msgType) {
   switch (state) {
     case 'START':          await sendMainMenu(phone, displayName); await saveSession(phone, 'MAIN_MENU', { name: displayName }); break;
     case 'MAIN_MENU':      await handleMainMenu(phone, displayName, input, data); break;
-    case 'CHOOSE_RATE':    await handleChooseRate(phone, input, data); break;
     case 'ENTER_PACKAGE':  await handleEnterPackage(phone, input, data); break;
     case 'POST_RATES':     await handlePostRates(phone, displayName, input, data); break;
-    case 'CHOOSE_SERVICE': await handleService(phone, input, data); break;
-    case 'CHOOSE_SUBTYPE': await handleSubType(phone, input, data); break;
     case 'ENTER_DATE':     await handleDate(phone, input, data); break;
     case 'ENTER_NAME':     await handleName(phone, input, data); break;
     case 'ENTER_EMAIL':    await handleEmail(phone, input, data); break;
@@ -290,45 +247,22 @@ async function handle(phone, displayName, input, msgType) {
 async function sendMainMenu(phone, name) {
   await sendButtons(phone,
     `👋 Hey there ${name}! Welcome to the *Nanoblack Enquiry System!*\n\n> Built for our valued clients so their time is never wasted waiting on a reply.\n\nWould you like to view our rates, or go ahead and make an enquiry?`,
-    [{ id: 'menu_rates', title: '📄Enquire - View Rates' }, { id: 'menu_book', title: '📅 Make an Enquiry' }]
+    [{ id: 'menu_rates', title: '📄 Enquire - See Rates' }, { id: 'menu_book', title: '📅 Make an Enquiry' }]
   );
 }
 
 async function handleMainMenu(phone, displayName, input, data) {
   if (input === 'menu_rates') {
-    await sendRatesList(phone);
-    await saveSession(phone, 'CHOOSE_RATE', data);
+    await sendDocument(phone, RATE_SHEETS.sub_md, 'Matric Dance Rates.pdf', `Here's our ${SUBTYPE_LABEL} rate card 📄`);
+    await sendText(phone, 'Which package are you interested in? (e.g. Entry, Standard, Half-Day, Full Day)');
+    await saveSession(phone, 'ENTER_PACKAGE', { ...data, service: 'svc_photo', service_label: SERVICE_LABEL, subtype: SUBTYPE_ID, subtype_label: SUBTYPE_LABEL });
   } else if (input === 'menu_book') {
-    await sendWelcome(phone, displayName);
-    await saveSession(phone, 'CHOOSE_SERVICE', { name: displayName });
+    await sendText(phone, `Great! Let's get your *${SUBTYPE_LABEL}* enquiry started. 🎉`);
+    await sendDatePickerFlow(phone);
+    await saveSession(phone, 'ENTER_DATE', { name: displayName, service: 'svc_photo', service_label: SERVICE_LABEL, subtype: SUBTYPE_ID, subtype_label: SUBTYPE_LABEL });
   } else {
     await sendText(phone, 'Please tap one of the buttons above, or type *menu* to start over.');
   }
-}
-
-async function sendRatesList(phone) {
-  await sendList(phone, 'Which occasion would you like rates for?', 'View Rates', [{ title: 'Select an Occasion', rows: RATE_OPTIONS }]);
-}
-
-async function handleChooseRate(phone, input, data) {
-  if (input === 'rate_other') {
-    await sendText(phone, `For *Event Coverage, Brands, Promo / Ad Videos, Corporate Videos, Event Filming & Music Videos*, rates are tailored to your project. \u{1F4BC}\n\nPlease email us at *Info@blackmeridian.co.za* and we'll send you a custom quote within 24 hours. \u{1F4E7}`);
-    await sendPostRatesPrompt(phone);
-    await saveSession(phone, 'POST_RATES', data);
-    return;
-  }
-  const option = RATE_OPTIONS.find(o => o.id === input);
-  if (!option) { await sendText(phone, 'Please select an occasion from the list, or type *menu* to restart.'); return; }
-  const subId = option.id.replace('rate_', '');
-  await sendDocument(phone, RATE_SHEETS[subId], `${option.title} Rates.pdf`, `Here's our ${option.title} rate card \u{1F4C4}`);
-  await sendText(phone, 'Which package are you interested in? (e.g. Entry, Standard, Half-Day, Full Day)');
-  const service = SUB_SERVICE[subId];
-  await saveSession(phone, 'ENTER_PACKAGE', {
-    ...data,
-    rate_label: option.title,
-    service, service_label: SERVICES[service],
-    subtype: subId, subtype_label: option.title,
-  });
 }
 
 async function handleEnterPackage(phone, input, data) {
@@ -347,63 +281,15 @@ async function sendPostRatesPrompt(phone) {
 
 async function handlePostRates(phone, displayName, input, data) {
   if (input === 'post_rates_book') {
-    if (data.subtype) {
-      await sendText(phone, `Great! Let's get your *${data.subtype_label}* enquiry started. \u{1F389}`);
-      await sendDatePickerFlow(phone);
-      await saveSession(phone, 'ENTER_DATE', data);
-    } else {
-      await sendWelcome(phone, displayName);
-      await saveSession(phone, 'CHOOSE_SERVICE', { name: displayName });
-    }
+    await sendText(phone, `Great! Let's get your *${data.subtype_label || SUBTYPE_LABEL}* enquiry started. 🎉`);
+    await sendDatePickerFlow(phone);
+    await saveSession(phone, 'ENTER_DATE', { ...data, service: data.service || 'svc_photo', service_label: data.service_label || SERVICE_LABEL, subtype: data.subtype || SUBTYPE_ID, subtype_label: data.subtype_label || SUBTYPE_LABEL });
   } else if (input === 'post_rates_browse') {
     await resetSession(phone);
-    await sendText(phone, `Thanks for stopping by! \u{1F64F} We'd love to capture your next big moment.\n\n\u{2728} When you're ready, just type *menu* and we'll get your enquiry sent in seconds. See you soon! \u{1F44B}`);
+    await sendText(phone, `Thanks for stopping by! 🙏 We'd love to capture your next big moment.\n\n✨ When you're ready, just type *menu* and we'll get your enquiry sent in seconds. See you soon! 👋`);
   } else {
     await sendPostRatesPrompt(phone);
   }
-}
-
-async function sendWelcome(phone, name) {
-  try {
-    const payload = {
-      messaging_product: 'whatsapp',
-      to: phone,
-      type: 'interactive',
-      interactive: {
-        type: 'button',
-        body: {
-          text: `👋 Hey there ${name}! Welcome to the *Nanoblack Enquiry System!*\n\n> Built for our valued clients so their time is never wasted waiting on a reply.\n\nWhat would you like to enquire about today?`,
-        },
-        action: {
-          buttons: [
-            { type: 'reply', reply: { id: 'svc_photo', title: '📸 Photography' } },
-            { type: 'reply', reply: { id: 'svc_video', title: '🎬 Videography' } },
-          ],
-        },
-      },
-    };
-    console.log(`Sending welcome to ${phone}`);
-    await axios.post(WA_API, payload, { headers: { Authorization: `Bearer ${process.env.WA_ACCESS_TOKEN}` }, timeout: WA_TIMEOUT_MS });
-    console.log(`sendWelcome OK to ${phone}`);
-  } catch(e) {
-    console.error('sendWelcome error:', e.response?.data || e.message);
-  }
-}
-
-async function handleService(phone, input, data) {
-  if (!SERVICES[input]) { await sendText(phone, 'Please tap one of the buttons above, or type *menu* to start over.'); return; }
-  data.service = input; data.service_label = SERVICES[input];
-  await sendList(phone, `Great choice! 🙌\n\nWhat type of ${data.service_label} are you looking for?`, 'View Options', [{ title: 'Choose a Type', rows: SUB_TYPES[input] }]);
-  await saveSession(phone, 'CHOOSE_SUBTYPE', data);
-}
-
-async function handleSubType(phone, input, data) {
-  const sub = (SUB_TYPES[data.service] || []).find(s => s.id === input);
-  if (!sub) { await sendText(phone, 'Please select an option from the list, or type *menu* to restart.'); return; }
-  data.subtype = input; data.subtype_label = sub.title;
-  await sendText(phone, `Perfect! *${sub.title}* — noted. 📝`);
-  await sendDatePickerFlow(phone);
-  await saveSession(phone, 'ENTER_DATE', data);
 }
 
 async function handleDate(phone, input, data) {
