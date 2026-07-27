@@ -246,8 +246,8 @@ async function handle(phone, displayName, input, msgType) {
 
 async function sendMainMenu(phone, name) {
   await sendButtons(phone,
-    `👋 Hey there ${name}! Welcome to the *Nanoblack Enquiry System!*\n\n> Built for our valued clients so their time is never wasted waiting on a reply.\n\nWould you like to view our rates, or go ahead and make an enquiry?`,
-    [{ id: 'menu_rates', title: '📄 Enquire - See Rates' }, { id: 'menu_book', title: '📅 Make an Enquiry' }]
+    `👋 Hi ${name}! Welcome to *Black Meridian Group* 🎓📸\n\nWe'd love to capture your Matric Dance night. Ready to take a look? ✨`,
+    [{ id: 'menu_rates', title: '📦 View Packages' }, { id: 'menu_book', title: '📅 Make an Enquiry' }]
   );
 }
 
