@@ -18,9 +18,12 @@ const TRAVEL_COSTS_PDF = `${PUBLIC_BASE_URL}/rates/travel-costs.pdf`;
 const TRAVEL_DISCLAIMER = '📌 *Travel Disclaimer:* These are estimated travel rates. Final travel cost will be confirmed once we know your exact address.';
 
 const LOCATION_OPTIONS = [
+  { id: 'loc_gp',    title: 'Gauteng',          description: 'No travel charge' },
   { id: 'loc_cpt',   title: 'Cape Town' },
   { id: 'loc_dbn',   title: 'Durban' },
   { id: 'loc_pmb',   title: 'Pietermaritzburg' },
+  { id: 'loc_nel',   title: 'Nelspruit' },
+  { id: 'loc_bfn',   title: 'Bloemfontein' },
   { id: 'loc_other', title: 'Other' },
 ];
 
