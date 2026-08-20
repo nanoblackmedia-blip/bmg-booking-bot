@@ -17,6 +17,13 @@ const RATE_SHEETS = {
 const TRAVEL_COSTS_PDF = `${PUBLIC_BASE_URL}/rates/Travel%20Costs.pdf`;
 const TRAVEL_DISCLAIMER = '📌 *Travel Disclaimer:* These are Fixed travel rates. Final travel cost will be included in the final Quote.';
 
+const PACKAGE_OPTIONS = [
+  { id: 'pkg_entry',    title: 'Entry — R2000',     description: '1 hour · 30 edited images · 3-4 days' },
+  { id: 'pkg_standard', title: 'Standard — R3000',  description: '2 hours · 50 edited images · 3-4 days' },
+  { id: 'pkg_half',     title: 'Half Day — R5000',  description: '4 hours · 70 images · 30s reel · 5-7 days' },
+  { id: 'pkg_full',     title: 'Full Day — R8000',  description: '6 hours · 100 images · 1min reel · 7-10 days' },
+];
+
 const LOCATION_OPTIONS = [
   { id: 'loc_gp',    title: 'Gauteng',          description: 'No travel charge' },
   { id: 'loc_cpt',   title: 'Cape Town' },
@@ -256,6 +263,7 @@ async function handle(phone, displayName, input, msgType) {
     case 'START':          await sendMainMenu(phone, displayName); await saveSession(phone, 'MAIN_MENU', { name: displayName }); break;
     case 'MAIN_MENU':      await handleMainMenu(phone, displayName, input, data); break;
     case 'ENTER_PACKAGE':  await handleEnterPackage(phone, input, data); break;
+    case 'CHOOSE_PACKAGE': await handleChoosePackage(phone, input, data); break;
     case 'POST_RATES':     await handlePostRates(phone, displayName, input, data); break;
     case 'ENTER_DATE':     await handleDate(phone, input, data); break;
     case 'ENTER_NAME':     await handleName(phone, input, data); break;
@@ -282,8 +290,8 @@ async function handleMainMenu(phone, displayName, input, data) {
     await sleep(4000);
     await sendText(phone, '📖 Take your time and browse through our packages.\n\nFound one you love? We\'d love to hear from you — sending an enquiry takes less than a minute! ✨');
     await sleep(3000);
-    await sendPostRatesPrompt(phone);
-    await saveSession(phone, 'POST_RATES', { ...data, service: 'svc_photo', service_label: SERVICE_LABEL, subtype: SUBTYPE_ID, subtype_label: SUBTYPE_LABEL });
+    await sendPackageList(phone);
+    await saveSession(phone, 'CHOOSE_PACKAGE', { ...data, service: 'svc_photo', service_label: SERVICE_LABEL, subtype: SUBTYPE_ID, subtype_label: SUBTYPE_LABEL });
   } else if (input === 'menu_book') {
     await sendText(phone, `Great! Let's get your *${SUBTYPE_LABEL}* enquiry started. 🎉`);
     await sendDatePickerFlow(phone);
@@ -296,6 +304,19 @@ async function handleMainMenu(phone, displayName, input, data) {
 async function handleEnterPackage(phone, input, data) {
   if (input.trim().length < 2) { await sendText(phone, "Please let us know which package you're interested in."); return; }
   data.rate_package = input;
+  await sendPostRatesPrompt(phone);
+  await saveSession(phone, 'POST_RATES', data);
+}
+
+async function sendPackageList(phone) {
+  await sendList(phone, 'Which package catches your eye? 👀', 'View Packages', [{ title: 'Choose a Package', rows: PACKAGE_OPTIONS }]);
+}
+
+async function handleChoosePackage(phone, input, data) {
+  const pkg = PACKAGE_OPTIONS.find(p => p.id === input);
+  if (!pkg) { await sendText(phone, 'Please select a package from the list, or type *menu* to restart.'); return; }
+  data.rate_package = pkg.title;
+  await sendText(phone, `Lovely choice — *${pkg.title}*. ✨`);
   await sendPostRatesPrompt(phone);
   await saveSession(phone, 'POST_RATES', data);
 }
