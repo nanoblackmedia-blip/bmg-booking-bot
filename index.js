@@ -345,7 +345,7 @@ async function handleName(phone, input, data) {
 async function handleEmail(phone, input, data) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input)) { await sendText(phone, "That doesn't look valid. Try again — e.g. _name@gmail.com_"); return; }
   data.client_email = input;
-  await sendList(phone, '📍 Where will you be travelling from?', 'Select Location', [{ title: 'Choose a Location', rows: LOCATION_OPTIONS }]);
+  await sendList(phone, '📍 Where are you based?', 'Select Location', [{ title: 'Choose a Location', rows: LOCATION_OPTIONS }]);
   await saveSession(phone, 'CHOOSE_LOCATION', data);
 }
 
