@@ -15,7 +15,7 @@ const RATE_SHEETS = {
 };
 
 const TRAVEL_COSTS_PDF = `${PUBLIC_BASE_URL}/rates/Travel%20Costs.pdf`;
-const TRAVEL_DISCLAIMER = '📌 *Travel Disclaimer:* These are Fixed travel rates. Final travel cost will be includedin the final Quote.';
+const TRAVEL_DISCLAIMER = '📌 *Travel Disclaimer:* These are Fixed travel rates. Final travel cost will be included in the final Quote.';
 
 const LOCATION_OPTIONS = [
   { id: 'loc_gp',    title: 'Gauteng',          description: 'No travel charge' },
