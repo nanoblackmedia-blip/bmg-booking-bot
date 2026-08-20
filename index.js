@@ -11,10 +11,10 @@ const WA_API = `https://graph.facebook.com/v19.0/${process.env.WA_PHONE_NUMBER_I
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || 'https://bmg-booking-bot-production.up.railway.app';
 
 const RATE_SHEETS = {
-  sub_md: `${PUBLIC_BASE_URL}/rates/matric-dance-rates.pdf`,
+  sub_md: `${PUBLIC_BASE_URL}/rates/Matric%20Dance%20Rates.pdf`,
 };
 
-const TRAVEL_COSTS_PDF = `${PUBLIC_BASE_URL}/rates/travel-costs.pdf`;
+const TRAVEL_COSTS_PDF = `${PUBLIC_BASE_URL}/rates/Travel%20Costs.pdf`;
 const TRAVEL_DISCLAIMER = '📌 *Travel Disclaimer:* These are Fixed travel rates. Final travel cost will be includedin the final Quote.';
 
 const LOCATION_OPTIONS = [
