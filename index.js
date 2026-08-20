@@ -405,7 +405,7 @@ async function handleNotes(phone, input, data) {
 async function sendConfirmSummary(phone, data) {
   const notes = data.notes ? `\n📌 *Notes:* ${data.notes}` : '';
   await sendButtons(phone,
-    `✅ *Enquiry/Booking Summary*\n\n👤 *Name:* ${data.client_name}\n📧 *Email:* ${data.client_email}\n📍 *Location:* ${data.location || 'N/A'}\n🎯 *Service:* ${data.service_label}\n📋 *Type:* ${data.subtype_label}\n📅 *Date:* ${data.preferred_date}${notes}\n\n👉 Please make sure these details are correct, then tap *✅ Confirm* to send your request.`,
+    `✅ *Enquiry/Booking Summary*\n\n👤 *Name:* ${data.client_name}\n📧 *Email:* ${data.client_email}\n📍 *Location:* ${data.location || 'N/A'}\n🎯 *Service:* ${data.service_label}\n📋 *Type:* ${data.subtype_label}${data.rate_package ? `\n💰 *Package:* ${data.rate_package}` : ''}\n📅 *Date:* ${data.preferred_date}${notes}\n\n👉 Please make sure these details are correct, then tap *✅ Confirm* to send your request.`,
     [{ id: 'confirm_yes', title: '✅ Confirm' }, { id: 'confirm_edit', title: '✏️ Start Over' }, { id: 'confirm_cancel', title: '❌ Cancel' }]
   );
 }
@@ -439,7 +439,7 @@ try {
           { type: 'text', text: data.client_email },
           { type: 'text', text: `${data.service_label} → ${data.subtype_label}` },
           { type: 'text', text: data.preferred_date },
-          { type: 'text', text: data.notes || 'None' },
+          { type: 'text', text: [data.rate_package ? `Package: ${data.rate_package}` : null, data.notes || null].filter(Boolean).join(' | ') || 'None' },
         ],
       }],
     },
