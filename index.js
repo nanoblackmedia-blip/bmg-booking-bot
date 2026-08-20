@@ -14,6 +14,16 @@ const RATE_SHEETS = {
   sub_md: `${PUBLIC_BASE_URL}/rates/matric-dance-rates.pdf`,
 };
 
+const TRAVEL_COSTS_PDF = `${PUBLIC_BASE_URL}/rates/travel-costs.pdf`;
+const TRAVEL_DISCLAIMER = '📌 *Travel Disclaimer:* These are estimated travel rates. Final travel cost will be confirmed once we know your exact address.';
+
+const LOCATION_OPTIONS = [
+  { id: 'loc_cpt',   title: 'Cape Town' },
+  { id: 'loc_dbn',   title: 'Durban' },
+  { id: 'loc_pmb',   title: 'Pietermaritzburg' },
+  { id: 'loc_other', title: 'Other' },
+];
+
 const SERVICE_LABEL = '📸 Photography';
 const SUBTYPE_ID = 'sub_md';
 const SUBTYPE_LABEL = 'Matric Dance';
@@ -59,7 +69,7 @@ async function appendToSheet(bookingId, data, phone) {
     const sheets = google.sheets({ version: 'v4', auth });
     await sheets.spreadsheets.values.append({
       spreadsheetId: process.env.GOOGLE_SHEET_ID,
-      range: 'Sheet1!A:J',
+      range: 'Sheet1!A:K',
       valueInputOption: 'USER_ENTERED',
       resource: {
         values: [[
@@ -68,6 +78,7 @@ async function appendToSheet(bookingId, data, phone) {
           data.client_name,
           `+${phone}`,
           data.client_email,
+          data.location || '',
           data.service_label,
           data.subtype_label,
           data.preferred_date,
@@ -245,6 +256,8 @@ async function handle(phone, displayName, input, msgType) {
     case 'ENTER_DATE':     await handleDate(phone, input, data); break;
     case 'ENTER_NAME':     await handleName(phone, input, data); break;
     case 'ENTER_EMAIL':    await handleEmail(phone, input, data); break;
+    case 'CHOOSE_LOCATION':      await handleLocation(phone, input, data); break;
+    case 'ENTER_LOCATION_OTHER': await handleLocationOther(phone, input, data); break;
     case 'ENTER_NOTES':    await handleNotes(phone, input, data); break;
     case 'CONFIRM':        await handleConfirm(phone, input, data); break;
     default: await resetSession(phone); await sendMainMenu(phone, displayName); await saveSession(phone, 'MAIN_MENU', { name: displayName });
@@ -329,7 +342,29 @@ async function handleName(phone, input, data) {
 async function handleEmail(phone, input, data) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input)) { await sendText(phone, "That doesn't look valid. Try again — e.g. _name@gmail.com_"); return; }
   data.client_email = input;
-  await sendText(phone, 'Almost done! Please enter the location\n\n_Type *skip* if none._');
+  await sendList(phone, '📍 Where will you be travelling from?', 'Select Location', [{ title: 'Choose a Location', rows: LOCATION_OPTIONS }]);
+  await saveSession(phone, 'CHOOSE_LOCATION', data);
+}
+
+async function handleLocation(phone, input, data) {
+  const loc = LOCATION_OPTIONS.find(l => l.id === input);
+  if (!loc) { await sendText(phone, 'Please select a location from the list, or type *menu* to restart.'); return; }
+  if (loc.id === 'loc_other') {
+    await sendText(phone, 'No problem! Please type your location.');
+    await saveSession(phone, 'ENTER_LOCATION_OTHER', data);
+    return;
+  }
+  data.location = loc.title;
+  await sendDocument(phone, TRAVEL_COSTS_PDF, 'Travel Costs.pdf', `Here's our travel cost guide for ${loc.title} 📄`);
+  await sendText(phone, TRAVEL_DISCLAIMER);
+  await sendText(phone, 'Almost done! Anything else we should know?\n\n_Type *skip* if none._');
+  await saveSession(phone, 'ENTER_NOTES', data);
+}
+
+async function handleLocationOther(phone, input, data) {
+  if (input.trim().length < 2) { await sendText(phone, 'Please enter your location.'); return; }
+  data.location = input;
+  await sendText(phone, 'Almost done! Anything else we should know?\n\n_Type *skip* if none._');
   await saveSession(phone, 'ENTER_NOTES', data);
 }
 
@@ -342,7 +377,7 @@ async function handleNotes(phone, input, data) {
 async function sendConfirmSummary(phone, data) {
   const notes = data.notes ? `\n📌 *Notes:* ${data.notes}` : '';
   await sendButtons(phone,
-    `✅ *Enquiry/Booking Summary*\n\n👤 *Name:* ${data.client_name}\n📧 *Email:* ${data.client_email}\n🎯 *Service:* ${data.service_label}\n📋 *Type:* ${data.subtype_label}\n📅 *Date:* ${data.preferred_date}${notes}\n\n👉 Please make sure these details are correct, then tap *✅ Confirm* to send your request.`,
+    `✅ *Enquiry/Booking Summary*\n\n👤 *Name:* ${data.client_name}\n📧 *Email:* ${data.client_email}\n📍 *Location:* ${data.location || 'N/A'}\n🎯 *Service:* ${data.service_label}\n📋 *Type:* ${data.subtype_label}\n📅 *Date:* ${data.preferred_date}${notes}\n\n👉 Please make sure these details are correct, then tap *✅ Confirm* to send your request.`,
     [{ id: 'confirm_yes', title: '✅ Confirm' }, { id: 'confirm_edit', title: '✏️ Start Over' }, { id: 'confirm_cancel', title: '❌ Cancel' }]
   );
 }
@@ -352,9 +387,9 @@ async function handleConfirm(phone, input, data) {
     try {
       const pool = await getDB();
       const [result] = await pool.query(
-        `INSERT INTO wa_bookings (phone, client_name, client_email, service, service_label, subtype, subtype_label, preferred_date, notes, status, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
-        [phone, data.client_name, data.client_email, data.service, data.service_label, data.subtype, data.subtype_label, data.preferred_date, data.notes || '']
+        `INSERT INTO wa_bookings (phone, client_name, client_email, location, service, service_label, subtype, subtype_label, preferred_date, notes, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
+        [phone, data.client_name, data.client_email, data.location || '', data.service, data.service_label, data.subtype, data.subtype_label, data.preferred_date, data.notes || '']
       );
       await sendText(phone, `🎉 *Request Sent!*\n\nWe'll be in touch in regards to the availability of your request. 📅\n\nThanks *${data.client_name}* — we'll be in touch within 24 hours.\n\n📋 *Reference:* #BMG-${result.insertId}\n\nType *menu* to make another enquiry. 🙏`);
       await saveSession(phone, 'DONE', data);
