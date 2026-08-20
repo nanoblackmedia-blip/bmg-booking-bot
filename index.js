@@ -113,6 +113,7 @@ async function getDB() {
 
 // ─── WhatsApp API ─────────────────────────────────────────────────────────────
 const WA_TIMEOUT_MS = 10000;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function sendText(to, text) {
   try {
@@ -279,6 +280,7 @@ async function handleMainMenu(phone, displayName, input, data) {
   if (input === 'menu_rates') {
     await sendDocument(phone, RATE_SHEETS.sub_md, 'Matric Dance Rates.pdf', `Here's our ${SUBTYPE_LABEL} rate card 📄`);
     await sendText(phone, '📖 Take your time and browse through our packages.\n\nFound one you love? We\'d love to hear from you — sending an enquiry takes less than a minute! ✨');
+    await sleep(3000);
     await sendPostRatesPrompt(phone);
     await saveSession(phone, 'POST_RATES', { ...data, service: 'svc_photo', service_label: SERVICE_LABEL, subtype: SUBTYPE_ID, subtype_label: SUBTYPE_LABEL });
   } else if (input === 'menu_book') {
