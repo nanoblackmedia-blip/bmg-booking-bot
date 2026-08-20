@@ -279,6 +279,7 @@ async function sendMainMenu(phone, name) {
 async function handleMainMenu(phone, displayName, input, data) {
   if (input === 'menu_rates') {
     await sendDocument(phone, RATE_SHEETS.sub_md, 'Matric Dance Rates.pdf', `Here's our ${SUBTYPE_LABEL} rate card 📄`);
+    await sleep(4000);
     await sendText(phone, '📖 Take your time and browse through our packages.\n\nFound one you love? We\'d love to hear from you — sending an enquiry takes less than a minute! ✨');
     await sleep(3000);
     await sendPostRatesPrompt(phone);
