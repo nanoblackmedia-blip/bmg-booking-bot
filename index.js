@@ -294,8 +294,8 @@ async function handleMainMenu(phone, displayName, input, data) {
     await saveSession(phone, 'CHOOSE_PACKAGE', { ...data, service: 'svc_photo', service_label: SERVICE_LABEL, subtype: SUBTYPE_ID, subtype_label: SUBTYPE_LABEL });
   } else if (input === 'menu_book') {
     await sendText(phone, `Great! Let's get your *${SUBTYPE_LABEL}* enquiry started. 🎉`);
-    await sendDatePickerFlow(phone);
-    await saveSession(phone, 'ENTER_DATE', { name: displayName, service: 'svc_photo', service_label: SERVICE_LABEL, subtype: SUBTYPE_ID, subtype_label: SUBTYPE_LABEL });
+    await sendPackageList(phone);
+    await saveSession(phone, 'CHOOSE_PACKAGE', { name: displayName, skip_browse_prompt: true, service: 'svc_photo', service_label: SERVICE_LABEL, subtype: SUBTYPE_ID, subtype_label: SUBTYPE_LABEL });
   } else {
     await sendText(phone, 'Please tap one of the buttons above, or type *menu* to start over.');
   }
@@ -317,6 +317,11 @@ async function handleChoosePackage(phone, input, data) {
   if (!pkg) { await sendText(phone, 'Please select a package from the list, or type *menu* to restart.'); return; }
   data.rate_package = pkg.title;
   await sendText(phone, `Lovely choice — *${pkg.title}*. ✨`);
+  if (data.skip_browse_prompt) {
+    await sendDatePickerFlow(phone);
+    await saveSession(phone, 'ENTER_DATE', data);
+    return;
+  }
   await sendPostRatesPrompt(phone);
   await saveSession(phone, 'POST_RATES', data);
 }
