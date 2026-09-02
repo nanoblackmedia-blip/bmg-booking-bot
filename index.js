@@ -1,4 +1,3 @@
-
 const express    = require('express');
 const mysql      = require('mysql2/promise');
 const axios      = require('axios');
@@ -49,24 +48,66 @@ const BOOKING_DATE_FLOW_ID = '908090289013623';
 const ADMIN_PHONE = '27650767631';
  
 // ─── Admin accept/decline ──────────────────────────────────────────────────────
+// Both confirmBooking/declineBooking are the single source of truth for what
+// "accepting" or "declining" a booking actually does — the WhatsApp admin
+// command below and the desktop app's /api/inquiries/:id/confirm|decline
+// routes both call these directly rather than each having their own copy.
+// That's deliberate: a client-facing message with banking details is exactly
+// the kind of thing that must never drift between two code paths.
+ 
+function bookingNotFoundError() {
+  const err = new Error('Booking not found');
+  err.code = 'NOT_FOUND';
+  return err;
+}
+ 
+// opts.notifyAdmin controls the "✅ confirmed, client notified" receipt back
+// to ADMIN_PHONE — on by default for the WhatsApp path (where that receipt
+// IS the confirmation the admin sees), off for the desktop app's API path
+// (where the app's own UI already shows the result; a WhatsApp message on
+// top of that would just be noise).
+async function confirmBooking(bookingId, opts) {
+  opts = opts || {};
+  const pool = await getDB();
+  const [rows] = await pool.query('SELECT * FROM wa_bookings WHERE id = ?', [bookingId]);
+  if (!rows.length) throw bookingNotFoundError();
+  const booking = rows[0];
+  await pool.query('UPDATE wa_bookings SET status = ? WHERE id = ?', ['confirmed', bookingId]);
+  const ref = `BMG-${String(bookingId).padStart(4, '0')}`;
+  await sendText(booking.phone, `🎉 *Booking Confirmed!*\n\nHi ${booking.client_name}, your *${booking.subtype_label}* booking for *${booking.preferred_date}* is confirmed. ✅\n\n📋 Reference: #${ref}\n\nWe can't wait to work with you! If you have any questions, just reply here.`);
+  await sendText(booking.phone, `💰 *Reserve Your Spot*\n\nA *50% deposit* is required to secure your booking.\n\n🏦 *Account name:* Black Meridian Group\n🏦 *Bank:* FNB/RMB\n🔢 *Account no.:* 63202712899\n🏢 *Branch code:* 255355\n📝 *Reference:* ${ref}\n\n⚠️ Please use the reference above so we can match your payment. Once we receive it, your spot is locked in! 🔒\n\n📞 I'll personally give you a call on our business number for a quick care call before your session.`);
+  if (opts.notifyAdmin !== false) {
+    await sendText(ADMIN_PHONE, `✅ Booking #BMG-${bookingId} confirmed. Client notified.`);
+  }
+  return booking;
+}
+ 
+async function declineBooking(bookingId, opts) {
+  opts = opts || {};
+  const pool = await getDB();
+  const [rows] = await pool.query('SELECT * FROM wa_bookings WHERE id = ?', [bookingId]);
+  if (!rows.length) throw bookingNotFoundError();
+  const booking = rows[0];
+  await pool.query('UPDATE wa_bookings SET status = ? WHERE id = ?', ['declined', bookingId]);
+  await sendText(booking.phone, `Hi ${booking.client_name}, unfortunately we're unable to accommodate your *${booking.subtype_label}* request for *${booking.preferred_date}*. 🙏\n\nPlease reply here or type *menu* to pick a different date — we'd still love to work with you!`);
+  if (opts.notifyAdmin !== false) {
+    await sendText(ADMIN_PHONE, `❌ Booking #BMG-${bookingId} declined. Client notified.`);
+  }
+  return booking;
+}
+ 
 async function handleAdminCommand(adminPhone, action, bookingId) {
   try {
-    const pool = await getDB();
-    const [rows] = await pool.query('SELECT * FROM wa_bookings WHERE id = ?', [bookingId]);
-    if (!rows.length) { await sendText(adminPhone, `\u26A0\uFE0F Booking #BMG-${bookingId} not found.`); return; }
-    const booking = rows[0];
     if (action === 'confirm') {
-      await pool.query('UPDATE wa_bookings SET status = ? WHERE id = ?', ['confirmed', bookingId]);
-      const ref = `BMG-${String(bookingId).padStart(4, '0')}`;
-      await sendText(booking.phone, `\u{1F389} *Booking Confirmed!*\n\nHi ${booking.client_name}, your *${booking.subtype_label}* booking for *${booking.preferred_date}* is confirmed. \u2705\n\n\u{1F4CB} Reference: #${ref}\n\nWe can't wait to work with you! If you have any questions, just reply here.`);
-      await sendText(booking.phone, `\u{1F4B0} *Reserve Your Spot*\n\nA *50% deposit* is required to secure your booking.\n\n\u{1F3E6} *Account name:* Black Meridian Group\n\u{1F3E6} *Bank:* FNB/RMB\n\u{1F522} *Account no.:* 63202712899\n\u{1F3E2} *Branch code:* 255355\n\u{1F4DD} *Reference:* ${ref}\n\n\u26A0\uFE0F Please use the reference above so we can match your payment. Once we receive it, your spot is locked in! \u{1F512}\n\n\u{1F4DE} I'll personally give you a call on our business number for a quick care call before your session.`);
-      await sendText(adminPhone, `\u2705 Booking #BMG-${bookingId} confirmed. Client notified.`);
+      await confirmBooking(bookingId);
     } else {
-      await pool.query('UPDATE wa_bookings SET status = ? WHERE id = ?', ['declined', bookingId]);
-      await sendText(booking.phone, `Hi ${booking.client_name}, unfortunately we're unable to accommodate your *${booking.subtype_label}* request for *${booking.preferred_date}*. \u{1F64F}\n\nPlease reply here or type *menu* to pick a different date \u2014 we'd still love to work with you!`);
-      await sendText(adminPhone, `\u274C Booking #BMG-${bookingId} declined. Client notified.`);
+      await declineBooking(bookingId);
     }
   } catch(e) {
+    if (e.code === 'NOT_FOUND') {
+      await sendText(adminPhone, `⚠️ Booking #BMG-${bookingId} not found.`);
+      return;
+    }
     console.error('handleAdminCommand error:', e.message);
     await sendText(adminPhone, 'Something went wrong processing that command.');
   }
@@ -652,6 +693,41 @@ function checkApiSecret(req, res, next) {
   next();
 }
  
+// Accepts "45", "BMG-45", or "#BMG-45" — the desktop app addresses bookings
+// by the sheet's ID column text, the WhatsApp admin command by the raw
+// MySQL integer id. This normalizes either into both forms so a single
+// route can talk to the DB and the sheet without the caller worrying about
+// which spelling either side expects.
+function parseBookingRef(raw) {
+  const digits = String(raw || '').replace(/[^0-9]/g, '');
+  if (!digits) return null;
+  return { dbId: digits, sheetId: '#BMG-' + digits };
+}
+ 
+// Shared by /status, /confirm, and /decline below — one place that knows
+// how to find a booking's row and overwrite its Status cell, rather than
+// three copies of the same lookup-by-ID logic drifting apart over time.
+// Returns false (not an error) when the row simply isn't in the sheet yet —
+// callers decide whether that's worth surfacing.
+async function writeSheetStatus(sheets, sheetId, status) {
+  const idColumn = await sheets.spreadsheets.values.get({
+    spreadsheetId: process.env.GOOGLE_SHEET_ID,
+    range: 'Sheet1!A:A',
+  });
+  const idRows = idColumn.data.values || [];
+  const rowIndex = idRows.findIndex((r) => (r[0] || '').trim() === sheetId);
+  if (rowIndex < 1) return false; // row 0 is the header row
+  const statusColIdx = SHEET_HEADERS.findIndex((h) => h.toLowerCase() === 'status');
+  const colLetter = String.fromCharCode('A'.charCodeAt(0) + statusColIdx);
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: process.env.GOOGLE_SHEET_ID,
+    range: `Sheet1!${colLetter}${rowIndex + 1}`,
+    valueInputOption: 'USER_ENTERED',
+    resource: { values: [[status]] },
+  });
+  return true;
+}
+ 
 app.get('/api/inquiries', checkApiSecret, async (req, res) => {
   try {
     const sheets = sheetsClient();
@@ -679,38 +755,67 @@ app.get('/api/inquiries', checkApiSecret, async (req, res) => {
   }
 });
  
-// Mirrors the desktop app's Accepted/Responded/Skipped state onto the
-// sheet's Status column, keyed by booking ID (e.g. "#BMG-45") since that's
-// the one identifier every bot-originated row always has. Best-effort by
-// design from the caller's side — the desktop app's local state stays
-// authoritative even if this fails; this only keeps the sheet itself
-// meaningful for anyone who opens it directly instead of showing "Pending"
-// forever regardless of what's actually happened with the booking.
+// Plain label mirror — no client-facing side effects. Used for Responded/
+// un-Responded/un-Accepted, none of which have a WhatsApp-side equivalent
+// message to send. Accept itself no longer uses this route; see /confirm.
 app.post('/api/inquiries/:id/status', checkApiSecret, async (req, res) => {
   const bookingId = String(req.params.id || '').trim();
   const status = String((req.body && req.body.status) || '').trim();
   if (!bookingId || !status) { res.status(400).json({ error: 'id and status are required' }); return; }
   try {
-    const sheets = sheetsClient();
-    const idColumn = await sheets.spreadsheets.values.get({
-      spreadsheetId: process.env.GOOGLE_SHEET_ID,
-      range: 'Sheet1!A:A',
-    });
-    const idRows = idColumn.data.values || [];
-    const rowIndex = idRows.findIndex((r) => (r[0] || '').trim() === bookingId);
-    if (rowIndex < 1) { res.status(404).json({ error: 'Booking ID not found' }); return; } // row 0 is the header row
-    const statusColIdx = SHEET_HEADERS.findIndex((h) => h.toLowerCase() === 'status');
-    const colLetter = String.fromCharCode('A'.charCodeAt(0) + statusColIdx);
-    await sheets.spreadsheets.values.update({
-      spreadsheetId: process.env.GOOGLE_SHEET_ID,
-      range: `Sheet1!${colLetter}${rowIndex + 1}`,
-      valueInputOption: 'USER_ENTERED',
-      resource: { values: [[status]] },
-    });
+    const found = await writeSheetStatus(sheetsClient(), bookingId, status);
+    if (!found) { res.status(404).json({ error: 'Booking ID not found' }); return; }
     res.json({ ok: true });
   } catch (e) {
     console.error('POST /api/inquiries/:id/status error:', e.message);
     res.status(500).json({ error: 'Failed to update status' });
+  }
+});
+ 
+// Full parity with the WhatsApp admin "confirm #BMG-X" command — this is
+// what the desktop app's Accept button calls. Updates wa_bookings, messages
+// the client with their confirmation and deposit/banking details via
+// confirmBooking() (the exact same function the WhatsApp path uses), and
+// mirrors the sheet's Status cell. notifyAdmin is off since the desktop
+// app's own UI is the confirmation the person clicking Accept sees.
+app.post('/api/inquiries/:id/confirm', checkApiSecret, async (req, res) => {
+  const ref = parseBookingRef(req.params.id);
+  if (!ref) { res.status(400).json({ error: 'Invalid booking id' }); return; }
+  try {
+    const booking = await confirmBooking(ref.dbId, { notifyAdmin: false });
+    try {
+      await writeSheetStatus(sheetsClient(), ref.sheetId, 'Accepted');
+    } catch (e) {
+      // The client has already been messaged and the DB already updated —
+      // don't fail the whole request over the sheet mirror specifically.
+      console.error('Sheet status write after confirm failed:', e.message);
+    }
+    res.json({ ok: true, booking: { id: booking.id, client_name: booking.client_name } });
+  } catch (e) {
+    if (e.code === 'NOT_FOUND') { res.status(404).json({ error: 'Booking not found' }); return; }
+    console.error('POST /api/inquiries/:id/confirm error:', e.message);
+    res.status(500).json({ error: 'Failed to confirm booking' });
+  }
+});
+ 
+// Same shape as /confirm, for symmetry — not called from the desktop app
+// yet (there's no Decline button in inquiries.html today), but the shared
+// declineBooking() function is right here if that's ever added.
+app.post('/api/inquiries/:id/decline', checkApiSecret, async (req, res) => {
+  const ref = parseBookingRef(req.params.id);
+  if (!ref) { res.status(400).json({ error: 'Invalid booking id' }); return; }
+  try {
+    const booking = await declineBooking(ref.dbId, { notifyAdmin: false });
+    try {
+      await writeSheetStatus(sheetsClient(), ref.sheetId, 'Declined');
+    } catch (e) {
+      console.error('Sheet status write after decline failed:', e.message);
+    }
+    res.json({ ok: true, booking: { id: booking.id, client_name: booking.client_name } });
+  } catch (e) {
+    if (e.code === 'NOT_FOUND') { res.status(404).json({ error: 'Booking not found' }); return; }
+    console.error('POST /api/inquiries/:id/decline error:', e.message);
+    res.status(500).json({ error: 'Failed to decline booking' });
   }
 });
  
