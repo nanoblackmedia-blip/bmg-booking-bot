@@ -67,16 +67,83 @@ async function handleAdminCommand(adminPhone, action, bookingId) {
 }
 
 // ─── Google Sheets ────────────────────────────────────────────────────────────
+
+// The single source of truth for what appendToSheet() writes, in order. Row 1
+// of the sheet has to match this exactly — the sheet is read elsewhere (the
+// desktop app, anyone opening it directly) by header text, not by position,
+// so if this array and row 1 drift apart, data silently lands under the
+// wrong label instead of failing loudly. That's exactly what happened when
+// Location was added here without row 1 being updated to match.
+const SHEET_HEADERS = [
+  'ID', 'Date', 'Name', 'Phone', 'Email', 'Location',
+  'Service', 'Type', 'Requested Date', 'Notes', 'Status',
+];
+
+function sheetsClient() {
+  const auth = new google.auth.GoogleAuth({
+    credentials: {
+      client_email: process.env.GOOGLE_CLIENT_EMAIL,
+      private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    },
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+  });
+  return google.sheets({ version: 'v4', auth });
+}
+
+// Checked once per process lifetime rather than before every single append —
+// row 1 doesn't change on its own between bookings, and re-checking on every
+// enquiry would just be an extra round trip for no benefit. A fresh check
+// happens again after every Railway restart/redeploy, which is exactly when
+// a header row is most likely to have drifted (a schema change shipped, or
+// someone hand-edited row 1 while the old deploy was still running).
+let headerCheckDone = false;
+
+async function ensureSheetHeaders(sheets) {
+  if (headerCheckDone) return;
+  headerCheckDone = true; // set before the check so a slow/failed call can't retry-storm every booking in the meantime
+  try {
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Sheet1!A1:K1',
+    });
+    const row = (res.data.values && res.data.values[0]) || [];
+    const isBlank = row.every((c) => !c || !String(c).trim());
+
+    if (isBlank) {
+      // Brand new / empty sheet — write the correct header row ourselves
+      // rather than silently appending data under no headers at all.
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: process.env.GOOGLE_SHEET_ID,
+        range: 'Sheet1!A1:K1',
+        valueInputOption: 'USER_ENTERED',
+        resource: { values: [SHEET_HEADERS] },
+      });
+      console.log('Sheet was empty — wrote header row.');
+      return;
+    }
+
+    const matches = SHEET_HEADERS.every((h, i) => (row[i] || '').trim().toLowerCase() === h.toLowerCase());
+    if (!matches) {
+      console.error('Sheet header mismatch. Expected:', SHEET_HEADERS, 'Found:', row);
+      await sendText(
+        ADMIN_PHONE,
+        `⚠️ *Booking sheet headers don't match what the bot writes.*\n\nExpected: ${SHEET_HEADERS.join(' · ')}\n\nFound: ${row.join(' · ') || '(empty row)'}\n\nNew bookings will keep landing under the wrong column labels until row 1 is fixed.`
+      ).catch(() => {});
+    }
+  } catch (e) {
+    console.error('Header check failed:', e.message);
+    // Don't block bookings on this check failing — worst case here is the
+    // same silent-drift risk that already existed before this guard.
+  }
+}
+
 async function appendToSheet(bookingId, data, phone) {
   try {
-    const auth = new google.auth.GoogleAuth({
-      credentials: {
-        client_email: process.env.GOOGLE_CLIENT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-      },
-      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-    });
-    const sheets = google.sheets({ version: 'v4', auth });
+    const sheets = sheetsClient();
+    await ensureSheetHeaders(sheets);
+    // notes is always '' now — see the comment in handleConfirm(). Keeping
+    // it here preserves the 11-value row shape ensureSheetHeaders() checks
+    // against; dropping it would immediately re-trigger the mismatch alert.
     await sheets.spreadsheets.values.append({
       spreadsheetId: process.env.GOOGLE_SHEET_ID,
       range: 'Sheet1!A:K',
@@ -270,7 +337,6 @@ async function handle(phone, displayName, input, msgType) {
     case 'ENTER_EMAIL':    await handleEmail(phone, input, data); break;
     case 'CHOOSE_LOCATION':      await handleLocation(phone, input, data); break;
     case 'ENTER_LOCATION_OTHER': await handleLocationOther(phone, input, data); break;
-    case 'ENTER_NOTES':    await handleNotes(phone, input, data); break;
     case 'CONFIRM':        await handleConfirm(phone, input, data); break;
     default: await resetSession(phone); await sendMainMenu(phone, displayName); await saveSession(phone, 'MAIN_MENU', { name: displayName });
   }
@@ -390,27 +456,20 @@ async function handleLocation(phone, input, data) {
   data.location = loc.title;
   await sendDocument(phone, TRAVEL_COSTS_PDF, 'Travel Costs.pdf', `Here's our travel cost guide for ${loc.title} 📄`);
   await sendText(phone, TRAVEL_DISCLAIMER);
-  await sendText(phone, 'Almost done! Anything else we should know?\n\n_Type *skip* if none._');
-  await saveSession(phone, 'ENTER_NOTES', data);
+  await sendConfirmSummary(phone, data);
+  await saveSession(phone, 'CONFIRM', data);
 }
 
 async function handleLocationOther(phone, input, data) {
   if (input.trim().length < 2) { await sendText(phone, 'Please enter your location.'); return; }
   data.location = input;
-  await sendText(phone, 'Almost done! Anything else we should know?\n\n_Type *skip* if none._');
-  await saveSession(phone, 'ENTER_NOTES', data);
-}
-
-async function handleNotes(phone, input, data) {
-  data.notes = input.toLowerCase().trim() === 'skip' ? '' : input;
   await sendConfirmSummary(phone, data);
   await saveSession(phone, 'CONFIRM', data);
 }
 
 async function sendConfirmSummary(phone, data) {
-  const notes = data.notes ? `\n📌 *Notes:* ${data.notes}` : '';
   await sendButtons(phone,
-    `✅ *Enquiry/Booking Summary*\n\n👤 *Name:* ${data.client_name}\n📧 *Email:* ${data.client_email}\n📍 *Location:* ${data.location || 'N/A'}\n🎯 *Service:* ${data.service_label}\n📋 *Type:* ${data.subtype_label}${data.rate_package ? `\n💰 *Package:* ${data.rate_package}` : ''}\n📅 *Date:* ${data.preferred_date}${notes}\n\n👉 Please make sure these details are correct, then tap *✅ Confirm* to send your request.`,
+    `✅ *Enquiry/Booking Summary*\n\n👤 *Name:* ${data.client_name}\n📧 *Email:* ${data.client_email}\n📍 *Location:* ${data.location || 'N/A'}\n🎯 *Service:* ${data.service_label}\n📋 *Type:* ${data.subtype_label}${data.rate_package ? `\n💰 *Package:* ${data.rate_package}` : ''}\n📅 *Date:* ${data.preferred_date}\n\n👉 Please make sure these details are correct, then tap *✅ Confirm* to send your request.`,
     [{ id: 'confirm_yes', title: '✅ Confirm' }, { id: 'confirm_edit', title: '✏️ Start Over' }, { id: 'confirm_cancel', title: '❌ Cancel' }]
   );
 }
@@ -419,6 +478,12 @@ async function handleConfirm(phone, input, data) {
   if (input === 'confirm_yes') {
     try {
       const pool = await getDB();
+      // notes is no longer collected from the client (see handleLocation /
+      // handleLocationOther — they go straight to the confirm summary now),
+      // but the column stays in this INSERT and data.notes stays in
+      // appendToSheet()'s payload deliberately. Dropping it would shrink the
+      // row from 11 values back to 10 and reopen the exact column-shift bug
+      // that misaligned the Google Sheet before — this just always inserts ''.
       const [result] = await pool.query(
         `INSERT INTO wa_bookings (phone, client_name, client_email, location, service, service_label, subtype, subtype_label, preferred_date, notes, status, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
@@ -444,7 +509,7 @@ try {
           { type: 'text', text: data.client_email },
           { type: 'text', text: `${data.service_label} → ${data.subtype_label}` },
           { type: 'text', text: data.preferred_date },
-          { type: 'text', text: [data.rate_package ? `Package: ${data.rate_package}` : null, data.notes || null].filter(Boolean).join(' | ') || 'None' },
+          { type: 'text', text: data.rate_package ? `Package: ${data.rate_package}` : 'None' },
         ],
       }],
     },
