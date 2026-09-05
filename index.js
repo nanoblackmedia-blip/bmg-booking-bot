@@ -82,6 +82,39 @@ async function confirmBooking(bookingId, opts) {
   return booking;
 }
  
+// Delivery-style pings for accepted bookings — no DB status change, just a
+// WhatsApp message per stage. Kept as a lookup table (rather than three
+// near-identical functions) so the message copy lives in one place.
+const ROUTE_STAGES = {
+  en_route: {
+    adminLabel: 'On the way',
+    clientMessage: (b) => `🚗 *On Our Way!*\n\nHi ${b.client_name}, we're heading to your *${b.subtype_label}* session now. See you soon! 📸`,
+  },
+  arrived: {
+    adminLabel: 'Arrived',
+    clientMessage: (b) => `📍 *We've Arrived!*\n\nHi ${b.client_name}, we're here for your *${b.subtype_label}* session. See you in a moment!`,
+  },
+  session_complete: {
+    adminLabel: 'Session complete',
+    clientMessage: (b) => `🎬 *Session Complete!*\n\nThanks so much ${b.client_name}! We hope you loved your *${b.subtype_label}* session. We'll be in touch soon with next steps. 🙏`,
+  },
+};
+
+async function sendRouteUpdate(bookingId, stage, opts) {
+  opts = opts || {};
+  const info = ROUTE_STAGES[stage];
+  if (!info) throw new Error('Unknown stage: ' + stage);
+  const pool = await getDB();
+  const [rows] = await pool.query('SELECT * FROM wa_bookings WHERE id = ?', [bookingId]);
+  if (!rows.length) throw bookingNotFoundError();
+  const booking = rows[0];
+  await sendText(booking.phone, info.clientMessage(booking));
+  if (opts.notifyAdmin !== false) {
+    await sendText(ADMIN_PHONE, `📣 Booking #BMG-${bookingId}: ${info.adminLabel} — client notified.`);
+  }
+  return booking;
+}
+
 // Same shape as confirmBooking/declineBooking — the one place that knows
 // what "payment received" means (message the client, stamp the DB), so the
 // desktop app's Mark Paid button and any future WhatsApp path both call
@@ -856,6 +889,24 @@ app.post('/api/inquiries/:id/paid', checkApiSecret, async (req, res) => {
     if (e.code === 'NOT_FOUND') { res.status(404).json({ error: 'Booking not found' }); return; }
     console.error('POST /api/inquiries/:id/paid error:', e.message);
     res.status(500).json({ error: 'Failed to mark booking as paid' });
+  }
+});
+
+// Delivery-style pings — what the desktop app's On the way / Arrived /
+// Session complete buttons call. No status stored anywhere; just tells
+// sendRouteUpdate() which message to send.
+app.post('/api/inquiries/:id/route-update', checkApiSecret, async (req, res) => {
+  const ref = parseBookingRef(req.params.id);
+  if (!ref) { res.status(400).json({ error: 'Invalid booking id' }); return; }
+  const stage = String((req.body && req.body.stage) || '').trim();
+  if (!ROUTE_STAGES[stage]) { res.status(400).json({ error: 'stage must be one of: ' + Object.keys(ROUTE_STAGES).join(', ') }); return; }
+  try {
+    const booking = await sendRouteUpdate(ref.dbId, stage, { notifyAdmin: false });
+    res.json({ ok: true, booking: { id: booking.id, client_name: booking.client_name } });
+  } catch (e) {
+    if (e.code === 'NOT_FOUND') { res.status(404).json({ error: 'Booking not found' }); return; }
+    console.error('POST /api/inquiries/:id/route-update error:', e.message);
+    res.status(500).json({ error: 'Failed to send update' });
   }
 });
 
