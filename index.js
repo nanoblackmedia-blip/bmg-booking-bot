@@ -2,6 +2,7 @@ const express    = require('express');
 const mysql      = require('mysql2/promise');
 const axios      = require('axios');
 const { google } = require('googleapis');
+const crypto     = require('crypto');
  
 const app = express();
 app.use(express.json());
@@ -14,6 +15,54 @@ const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || 'https://bmg-booking-bot-
 // credentials — this one is cheap to rotate if it ever leaks, without
 // touching Sheets access at all.
 const API_SECRET = process.env.API_SECRET;
+ 
+// ── Mobile web access ────────────────────────────────────────────────────────
+// A single-password login for the phone-friendly Inquiries page at /mobile.
+// The desktop app keeps using x-api-key + API_SECRET (see checkAuth below) —
+// this is a second, independent front door for a browser, since a browser
+// can't safely hold API_SECRET the way the Electron app does (anyone could
+// read it via dev tools). Both MUST be set in Railway before /mobile works;
+// there's no fallback default for either, on purpose — a guessable default
+// here would defeat the point of having a login at all.
+const MOBILE_PASSWORD = process.env.MOBILE_PASSWORD;
+const MOBILE_SESSION_SECRET = process.env.MOBILE_SESSION_SECRET;
+const MOBILE_COOKIE_NAME = 'bmg_session';
+const MOBILE_SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+ 
+// The session "token" is just an HMAC of a fixed label under a secret only
+// this server knows — no per-login randomness, no session store, because
+// there's exactly one legitimate user (Nano) and the goal is "don't ship the
+// real API_SECRET to a browser", not multi-user session management.
+function mobileSessionToken() {
+  return crypto.createHmac('sha256', MOBILE_SESSION_SECRET).update('bmg-mobile-session').digest('hex');
+}
+ 
+function parseCookies(req) {
+  const header = req.headers.cookie;
+  const out = {};
+  if (!header) return out;
+  header.split(';').forEach((pair) => {
+    const idx = pair.indexOf('=');
+    if (idx === -1) return;
+    const k = pair.slice(0, idx).trim();
+    const v = pair.slice(idx + 1).trim();
+    if (k) out[k] = decodeURIComponent(v);
+  });
+  return out;
+}
+ 
+function hasValidMobileSession(req) {
+  if (!MOBILE_SESSION_SECRET) return false;
+  const cookies = parseCookies(req);
+  const token = cookies[MOBILE_COOKIE_NAME];
+  if (!token) return false;
+  // Constant-time comparison — this guards a real login, so it shouldn't
+  // leak timing information about how much of the token matched.
+  const expected = mobileSessionToken();
+  const a = Buffer.from(token);
+  const b = Buffer.from(expected);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
  
 const RATE_SHEETS = {
   sub_md: `${PUBLIC_BASE_URL}/rates/Matric%20Dance%20Rates.pdf`,
@@ -733,16 +782,17 @@ app.get('/', (req, res) => res.send('BMG Booking Bot ✅'));
 // its own separate, revocable secret, and never touches the Google
 // credentials or the sheet's own sharing settings at all. Once this is wired
 // up, the sheet itself can go back to fully private.
+// Two ways in: the desktop app sends x-api-key: API_SECRET directly; the
+// mobile page (which never holds that secret — see the /mobile section
+// above) sends its signed session cookie instead. Either is sufficient.
 function checkApiSecret(req, res, next) {
   if (!API_SECRET) {
     res.status(500).json({ error: 'API_SECRET is not configured on the server' });
     return;
   }
-  if (req.get('x-api-key') !== API_SECRET) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
-  }
-  next();
+  if (req.get('x-api-key') === API_SECRET) { next(); return; }
+  if (hasValidMobileSession(req)) { next(); return; }
+  res.status(401).json({ error: 'Unauthorized' });
 }
  
 // Accepts "45", "BMG-45", or "#BMG-45" — the desktop app addresses bookings
@@ -908,6 +958,295 @@ app.post('/api/inquiries/:id/route-update', checkApiSecret, async (req, res) => 
     console.error('POST /api/inquiries/:id/route-update error:', e.message);
     res.status(500).json({ error: 'Failed to send update' });
   }
+});
+
+// ── Mobile web page ──────────────────────────────────────────────────────────
+// A phone-friendly Inquiries view served straight from the bot, so Nano can
+// check and act on bookings without the desktop app. It talks to the exact
+// same /api/inquiries* routes above (via the session cookie checkApiSecret
+// now accepts) rather than duplicating any booking logic here — this is
+// presentation only.
+//
+// New/Accepted/Declined is read straight from the sheet's own Status column
+// (written by /confirm, /decline, /paid above) rather than the desktop app's
+// local accepted/declined/paid JSON files, which this page has no access to
+// and doesn't need — the sheet is already the shared source of truth.
+
+function requireMobileSession(req, res, next) {
+  if (hasValidMobileSession(req)) { next(); return; }
+  res.redirect('/mobile/login');
+}
+
+function mobileNotConfiguredMessage() {
+  const missing = [];
+  if (!MOBILE_PASSWORD) missing.push('MOBILE_PASSWORD');
+  if (!MOBILE_SESSION_SECRET) missing.push('MOBILE_SESSION_SECRET');
+  return `Set ${missing.join(' and ')} in Railway's environment variables for this service, then redeploy.`;
+}
+
+app.get('/mobile/login', (req, res) => {
+  if (!MOBILE_PASSWORD || !MOBILE_SESSION_SECRET) {
+    res.status(500).send(mobileNotConfiguredMessage());
+    return;
+  }
+  res.type('html').send(`<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Black Meridian — Sign in</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: #16150f; color: #f4f1e8; font-family: 'Segoe UI', system-ui, sans-serif; padding: 24px; }
+  form { width: 100%; max-width: 320px; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  p.sub { color: #9a9484; font-size: 13px; margin: 0 0 24px; }
+  input { width: 100%; padding: 12px 14px; border-radius: 8px; border: 1px solid #3d3a2d;
+    background: #201f16; color: #f4f1e8; font-size: 15px; margin-bottom: 12px; }
+  input:focus { outline: none; border-color: #9a7a3c; }
+  button { width: 100%; padding: 12px; border-radius: 8px; border: 0; background: #9a7a3c;
+    color: #16150f; font-weight: 600; font-size: 14px; cursor: pointer; }
+  button:disabled { opacity: .6; }
+  #err { color: #d1543f; font-size: 13px; margin-top: 10px; min-height: 16px; }
+</style></head>
+<body>
+  <form id="f">
+    <h1>Black Meridian Suite</h1>
+    <p class="sub">Sign in to view inquiries on your phone.</p>
+    <input type="password" id="pw" placeholder="Password" autofocus autocomplete="current-password">
+    <button type="submit" id="go">Sign in</button>
+    <div id="err"></div>
+  </form>
+  <script>
+    document.getElementById('f').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('go');
+      const err = document.getElementById('err');
+      btn.disabled = true; err.textContent = '';
+      try {
+        const res = await fetch('/mobile/login', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: document.getElementById('pw').value }),
+        });
+        if (res.ok) { location.href = '/mobile'; return; }
+        const data = await res.json().catch(() => ({}));
+        err.textContent = data.error || 'Wrong password.';
+      } catch (e) {
+        err.textContent = 'Could not reach the server.';
+      }
+      btn.disabled = false;
+    });
+  </script>
+</body></html>`);
+});
+
+app.post('/mobile/login', (req, res) => {
+  if (!MOBILE_PASSWORD || !MOBILE_SESSION_SECRET) {
+    res.status(500).json({ error: mobileNotConfiguredMessage() });
+    return;
+  }
+  const supplied = String((req.body && req.body.password) || '');
+  const expected = Buffer.from(MOBILE_PASSWORD);
+  const given = Buffer.from(supplied);
+  const match = given.length === expected.length && crypto.timingSafeEqual(given, expected);
+  if (!match) { res.status(401).json({ error: 'Wrong password.' }); return; }
+  const cookie = `${MOBILE_COOKIE_NAME}=${mobileSessionToken()}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${Math.floor(MOBILE_SESSION_MAX_AGE_MS / 1000)}`;
+  res.setHeader('Set-Cookie', cookie);
+  res.json({ ok: true });
+});
+
+app.get('/mobile/logout', (req, res) => {
+  res.setHeader('Set-Cookie', `${MOBILE_COOKIE_NAME}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`);
+  res.redirect('/mobile/login');
+});
+
+app.get('/mobile', requireMobileSession, (req, res) => {
+  res.type('html').send(`<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Inquiries — Black Meridian</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; background: #16150f; color: #f4f1e8; font-family: 'Segoe UI', system-ui, sans-serif;
+    padding-bottom: 40px; }
+  header { position: sticky; top: 0; background: #100f0a; padding: 14px 16px; display: flex;
+    align-items: center; justify-content: space-between; border-bottom: 1px solid #2e2c22; z-index: 10; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header button { background: none; border: 1px solid #3d3a2d; color: #cfc8b8; border-radius: 6px;
+    padding: 6px 10px; font-size: 12px; }
+  .tabs { display: flex; gap: 6px; padding: 12px 16px 0; }
+  .tab { flex: 1; text-align: center; padding: 9px 0; border-radius: 8px; font-size: 13px; font-weight: 600;
+    background: #201f16; color: #9a9484; border: 1px solid #2e2c22; }
+  .tab.active { background: #9a7a3c; color: #16150f; border-color: #9a7a3c; }
+  #status { padding: 10px 16px; font-size: 12px; color: #7d7864; }
+  #list { padding: 8px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .card { background: #1e1c14; border: 1px solid #2e2c22; border-radius: 12px; padding: 14px; }
+  .card .name { font-weight: 600; font-size: 15px; margin-bottom: 2px; }
+  .card .meta { font-size: 12px; color: #9a9484; margin-bottom: 10px; }
+  .card .id { display: inline-block; font-size: 10.5px; color: #9a7a3c; border: 1px solid #3d3a2d;
+    border-radius: 5px; padding: 1px 6px; margin-bottom: 8px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .btn { flex: 1; min-width: 90px; padding: 10px 8px; border-radius: 8px; border: 1px solid #3d3a2d;
+    background: none; color: #cfc8b8; font-size: 12.5px; font-weight: 600; text-align: center; }
+  .btn:active { transform: scale(.95); }
+  .btn.accept { color: #6b8a5f; border-color: #4a6a3f; }
+  .btn.decline { color: #a35a4f; border-color: #6a3f37; }
+  .btn.paid { color: #6b8a5f; border-color: #4a6a3f; }
+  .btn.sent { color: #4a7a3f; background: #21301c; border-color: #4a6a3f; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 3px 10px; }
+  .badge.declined { color: #d19a90; background: #3a1f1c; }
+  .badge.accepted { color: #a9c99c; background: #223018; }
+  .badge.paid { color: #a9c99c; background: #223018; margin-left: 6px; }
+  .empty { text-align: center; color: #7d7864; font-size: 13px; padding: 40px 20px; }
+</style></head>
+<body>
+  <header>
+    <h1>Inquiries</h1>
+    <button onclick="location.href='/mobile/logout'">Sign out</button>
+  </header>
+  <div class="tabs">
+    <div class="tab active" data-tab="new" onclick="switchTab('new')">New</div>
+    <div class="tab" data-tab="accepted" onclick="switchTab('accepted')">Accepted</div>
+    <div class="tab" data-tab="declined" onclick="switchTab('declined')">Declined</div>
+  </div>
+  <div id="status">Loading…</div>
+  <div id="list"></div>
+
+<script>
+let records = [];
+let headers = [];
+let currentTab = 'new';
+
+function col(name) {
+  return headers.find(h => h.toLowerCase() === name.toLowerCase());
+}
+
+async function api(path, opts) {
+  const res = await fetch(path, Object.assign({ credentials: 'include' }, opts || {}));
+  if (res.status === 401) { location.href = '/mobile/login'; throw new Error('Not signed in'); }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+async function load() {
+  document.getElementById('status').textContent = 'Loading…';
+  try {
+    const data = await api('/api/inquiries');
+    headers = data.headers || [];
+    records = data.records || [];
+    document.getElementById('status').textContent = records.length + ' inquiries';
+    render();
+  } catch (e) {
+    document.getElementById('status').textContent = 'Could not load: ' + e.message;
+  }
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(el => el.classList.toggle('active', el.dataset.tab === tab));
+  render();
+}
+
+function render() {
+  const statusCol = col('Status');
+  const nameCol = col('Name');
+  const idCol = col('ID');
+  const dateCol = col('Requested Date') || col('Date');
+  const svcCol = col('Type') || col('Service');
+
+  const grouped = { new: [], accepted: [], declined: [] };
+  records.forEach(r => {
+    const status = (statusCol && r[statusCol] || '').trim().toLowerCase();
+    if (status === 'declined') grouped.declined.push(r);
+    else if (status === 'accepted' || status === 'paid') grouped.accepted.push(r);
+    else grouped.new.push(r);
+  });
+
+  const list = document.getElementById('list');
+  const items = grouped[currentTab];
+  if (!items.length) {
+    list.innerHTML = '<div class="empty">Nothing here yet.</div>';
+    return;
+  }
+
+  list.innerHTML = items.map((r, i) => {
+    const realIdx = records.indexOf(r);
+    const name = nameCol ? r[nameCol] : 'Unnamed';
+    const id = idCol ? r[idCol] : '';
+    const date = dateCol ? r[dateCol] : '';
+    const svc = svcCol ? r[svcCol] : '';
+    const status = (statusCol && r[statusCol] || '').trim().toLowerCase();
+    const isPaid = status === 'paid';
+
+    let actions = '';
+    if (currentTab === 'new') {
+      actions = '<div class="row">'
+        + '<button class="btn accept" onclick="doAction(' + realIdx + ',\\'confirm\\',this)">Accept</button>'
+        + '<button class="btn decline" onclick="doAction(' + realIdx + ',\\'decline\\',this)">Decline</button>'
+        + '</div>';
+    } else if (currentTab === 'accepted') {
+      actions = '<div class="row">'
+        + (isPaid ? '<span class="badge paid">💰 Paid</span>' : '<button class="btn paid" onclick="doAction(' + realIdx + ',\\'paid\\',this)">💰 Mark Paid</button>')
+        + '</div><div class="row" style="margin-top:8px;">'
+        + '<button class="btn" onclick="doRoute(' + realIdx + ',\\'en_route\\',this)">🚗 On the way</button>'
+        + '<button class="btn" onclick="doRoute(' + realIdx + ',\\'arrived\\',this)">📍 Arrived</button>'
+        + '<button class="btn" onclick="doRoute(' + realIdx + ',\\'session_complete\\',this)">🎬 Complete</button>'
+        + '</div>';
+    } else {
+      actions = '<span class="badge declined">✕ Declined</span>';
+    }
+
+    return '<div class="card">'
+      + (id ? '<div class="id">' + esc(id) + '</div>' : '')
+      + '<div class="name">' + esc(name || 'Unnamed inquiry') + '</div>'
+      + '<div class="meta">' + esc(svc) + (date ? ' · ' + esc(date) : '') + '</div>'
+      + actions
+      + '</div>';
+  }).join('');
+}
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function doAction(idx, action, btn) {
+  const idCol = col('ID');
+  const id = idCol ? records[idx][idCol] : '';
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = '…';
+  try {
+    await api('/api/inquiries/' + encodeURIComponent(id) + '/' + action, { method: 'POST' });
+    await load();
+  } catch (e) {
+    alert('Failed: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+async function doRoute(idx, stage, btn) {
+  const idCol = col('ID');
+  const id = idCol ? records[idx][idCol] : '';
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = 'Sending…';
+  try {
+    await api('/api/inquiries/' + encodeURIComponent(id) + '/route-update', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stage }),
+    });
+    btn.textContent = '✓ Sent';
+    btn.classList.add('sent');
+    setTimeout(() => { btn.disabled = false; btn.classList.remove('sent'); btn.textContent = original; }, 2000);
+  } catch (e) {
+    alert('Failed: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+load();
+</script>
+</body></html>`);
 });
 
 app.listen(process.env.PORT || 3000, () => console.log(`Server running on port ${process.env.PORT || 3000}`));
