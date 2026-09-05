@@ -148,7 +148,7 @@ const ROUTE_STAGES = {
     clientMessage: (b) => `🎬 *Session Complete!*\n\nThanks so much ${b.client_name}! We hope you loved your *${b.subtype_label}* session. We'll be in touch soon with next steps. 🙏`,
   },
 };
-
+ 
 async function sendRouteUpdate(bookingId, stage, opts) {
   opts = opts || {};
   const info = ROUTE_STAGES[stage];
@@ -163,7 +163,7 @@ async function sendRouteUpdate(bookingId, stage, opts) {
   }
   return booking;
 }
-
+ 
 // Same shape as confirmBooking/declineBooking — the one place that knows
 // what "payment received" means (message the client, stamp the DB), so the
 // desktop app's Mark Paid button and any future WhatsApp path both call
@@ -182,7 +182,7 @@ async function markPaidBooking(bookingId, opts) {
   }
   return booking;
 }
-
+ 
 async function declineBooking(bookingId, opts) {
   opts = opts || {};
   const pool = await getDB();
@@ -830,6 +830,47 @@ async function writeSheetStatus(sheets, sheetId, status) {
   return true;
 }
  
+// The Sheets API needs the tab's internal numeric grid ID for row deletion
+// (a completely different number from anything in the booking data — don't
+// confuse it with the booking's own "#BMG-45" sheetId string used
+// everywhere else in this file). Cached for the life of the process since a
+// tab's grid ID never changes; refetching it on every delete would be a
+// wasted round trip.
+let cachedSheetGridId = null;
+async function getSheetGridId(sheets) {
+  if (cachedSheetGridId !== null) return cachedSheetGridId;
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: process.env.GOOGLE_SHEET_ID });
+  const tab = (meta.data.sheets || []).find((s) => s.properties && s.properties.title === 'Sheet1');
+  cachedSheetGridId = tab ? tab.properties.sheetId : 0;
+  return cachedSheetGridId;
+}
+ 
+// Actually deletes the row from the sheet — unlike writeSheetStatus, there's
+// no undo once this runs. Row indices aren't cached anywhere between calls
+// (this always re-looks-up the current row by ID first), so this is safe to
+// call even if other rows have shifted since the sheet was last read.
+async function deleteSheetRow(sheets, sheetId) {
+  const idColumn = await sheets.spreadsheets.values.get({
+    spreadsheetId: process.env.GOOGLE_SHEET_ID,
+    range: 'Sheet1!A:A',
+  });
+  const idRows = idColumn.data.values || [];
+  const rowIndex = idRows.findIndex((r) => (r[0] || '').trim() === sheetId);
+  if (rowIndex < 1) return false; // not found, or it's the header row
+  const gridId = await getSheetGridId(sheets);
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: process.env.GOOGLE_SHEET_ID,
+    resource: {
+      requests: [{
+        deleteDimension: {
+          range: { sheetId: gridId, dimension: 'ROWS', startIndex: rowIndex, endIndex: rowIndex + 1 },
+        },
+      }],
+    },
+  });
+  return true;
+}
+ 
 app.get('/api/inquiries', checkApiSecret, async (req, res) => {
   try {
     const sheets = sheetsClient();
@@ -941,7 +982,7 @@ app.post('/api/inquiries/:id/paid', checkApiSecret, async (req, res) => {
     res.status(500).json({ error: 'Failed to mark booking as paid' });
   }
 });
-
+ 
 // Delivery-style pings — what the desktop app's On the way / Arrived /
 // Session complete buttons call. No status stored anywhere; just tells
 // sendRouteUpdate() which message to send.
@@ -959,7 +1000,24 @@ app.post('/api/inquiries/:id/route-update', checkApiSecret, async (req, res) => 
     res.status(500).json({ error: 'Failed to send update' });
   }
 });
-
+ 
+// Permanently deletes the row from the sheet — no client message, no DB
+// change, just the sheet. Both the desktop app's Remove button and the
+// mobile page's Remove button call this directly; there's no local-only
+// "hide" version of Remove anymore now that this is the real thing.
+app.post('/api/inquiries/:id/remove', checkApiSecret, async (req, res) => {
+  const ref = parseBookingRef(req.params.id);
+  if (!ref) { res.status(400).json({ error: 'Invalid booking id' }); return; }
+  try {
+    const found = await deleteSheetRow(sheetsClient(), ref.sheetId);
+    if (!found) { res.status(404).json({ error: 'Booking not found in the sheet' }); return; }
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('POST /api/inquiries/:id/remove error:', e.message);
+    res.status(500).json({ error: 'Failed to remove the row from the sheet' });
+  }
+});
+ 
 // ── Mobile web page ──────────────────────────────────────────────────────────
 // A phone-friendly Inquiries view served straight from the bot, so Nano can
 // check and act on bookings without the desktop app. It talks to the exact
@@ -971,19 +1029,19 @@ app.post('/api/inquiries/:id/route-update', checkApiSecret, async (req, res) => 
 // (written by /confirm, /decline, /paid above) rather than the desktop app's
 // local accepted/declined/paid JSON files, which this page has no access to
 // and doesn't need — the sheet is already the shared source of truth.
-
+ 
 function requireMobileSession(req, res, next) {
   if (hasValidMobileSession(req)) { next(); return; }
   res.redirect('/mobile/login');
 }
-
+ 
 function mobileNotConfiguredMessage() {
   const missing = [];
   if (!MOBILE_PASSWORD) missing.push('MOBILE_PASSWORD');
   if (!MOBILE_SESSION_SECRET) missing.push('MOBILE_SESSION_SECRET');
   return `Set ${missing.join(' and ')} in Railway's environment variables for this service, then redeploy.`;
 }
-
+ 
 app.get('/mobile/login', (req, res) => {
   if (!MOBILE_PASSWORD || !MOBILE_SESSION_SECRET) {
     res.status(500).send(mobileNotConfiguredMessage());
@@ -1037,7 +1095,7 @@ app.get('/mobile/login', (req, res) => {
   </script>
 </body></html>`);
 });
-
+ 
 app.post('/mobile/login', (req, res) => {
   if (!MOBILE_PASSWORD || !MOBILE_SESSION_SECRET) {
     res.status(500).json({ error: mobileNotConfiguredMessage() });
@@ -1052,12 +1110,12 @@ app.post('/mobile/login', (req, res) => {
   res.setHeader('Set-Cookie', cookie);
   res.json({ ok: true });
 });
-
+ 
 app.get('/mobile/logout', (req, res) => {
   res.setHeader('Set-Cookie', `${MOBILE_COOKIE_NAME}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`);
   res.redirect('/mobile/login');
 });
-
+ 
 app.get('/mobile', requireMobileSession, (req, res) => {
   res.type('html').send(`<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1071,6 +1129,11 @@ app.get('/mobile', requireMobileSession, (req, res) => {
   header h1 { font-size: 16px; margin: 0; font-weight: 600; }
   header button { background: none; border: 1px solid #3d3a2d; color: #cfc8b8; border-radius: 6px;
     padding: 6px 10px; font-size: 12px; }
+  header .header-actions { display: flex; align-items: center; gap: 8px; }
+  #refresh-btn { display: flex; align-items: center; gap: 6px; }
+  #refresh-btn svg { width: 13px; height: 13px; transition: transform .5s ease; }
+  #refresh-btn.spinning svg { animation: spin .6s linear infinite; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   .tabs { display: flex; gap: 6px; padding: 12px 16px 0; }
   .tab { flex: 1; text-align: center; padding: 9px 0; border-radius: 8px; font-size: 13px; font-weight: 600;
     background: #201f16; color: #9a9484; border: 1px solid #2e2c22; }
@@ -1089,6 +1152,7 @@ app.get('/mobile', requireMobileSession, (req, res) => {
   .btn.accept { color: #6b8a5f; border-color: #4a6a3f; }
   .btn.decline { color: #a35a4f; border-color: #6a3f37; }
   .btn.paid { color: #6b8a5f; border-color: #4a6a3f; }
+  .btn.remove { color: #a35a4f; border-color: #6a3f37; }
   .btn.sent { color: #4a7a3f; background: #21301c; border-color: #4a6a3f; }
   .badge { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 3px 10px; }
   .badge.declined { color: #d19a90; background: #3a1f1c; }
@@ -1099,7 +1163,13 @@ app.get('/mobile', requireMobileSession, (req, res) => {
 <body>
   <header>
     <h1>Inquiries</h1>
-    <button onclick="location.href='/mobile/logout'">Sign out</button>
+    <div class="header-actions">
+      <button id="refresh-btn" onclick="manualRefresh()" title="Refresh from the desktop app / sheet">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+        Refresh
+      </button>
+      <button onclick="location.href='/mobile/logout'">Sign out</button>
+    </div>
   </header>
   <div class="tabs">
     <div class="tab active" data-tab="new" onclick="switchTab('new')">New</div>
@@ -1108,16 +1178,16 @@ app.get('/mobile', requireMobileSession, (req, res) => {
   </div>
   <div id="status">Loading…</div>
   <div id="list"></div>
-
+ 
 <script>
 let records = [];
 let headers = [];
 let currentTab = 'new';
-
+ 
 function col(name) {
   return headers.find(h => h.toLowerCase() === name.toLowerCase());
 }
-
+ 
 async function api(path, opts) {
   const res = await fetch(path, Object.assign({ credentials: 'include' }, opts || {}));
   if (res.status === 401) { location.href = '/mobile/login'; throw new Error('Not signed in'); }
@@ -1125,33 +1195,46 @@ async function api(path, opts) {
   if (!res.ok) throw new Error(data.error || 'Request failed');
   return data;
 }
-
+ 
 async function load() {
+  const btn = document.getElementById('refresh-btn');
+  if (btn) btn.classList.add('spinning');
   document.getElementById('status').textContent = 'Loading…';
   try {
     const data = await api('/api/inquiries');
     headers = data.headers || [];
     records = data.records || [];
-    document.getElementById('status').textContent = records.length + ' inquiries';
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    document.getElementById('status').textContent = records.length + ' inquiries · updated ' + timeStr;
     render();
   } catch (e) {
     document.getElementById('status').textContent = 'Could not load: ' + e.message;
+  } finally {
+    if (btn) btn.classList.remove('spinning');
   }
 }
-
+ 
+// Manual pull — same load(), just exposed as its own name so the button's
+// intent is clear and it's easy to attach analytics/haptics later without
+// touching the auto-load-on-open call at the bottom of this script.
+function manualRefresh() {
+  load();
+}
+ 
 function switchTab(tab) {
   currentTab = tab;
   document.querySelectorAll('.tab').forEach(el => el.classList.toggle('active', el.dataset.tab === tab));
   render();
 }
-
+ 
 function render() {
   const statusCol = col('Status');
   const nameCol = col('Name');
   const idCol = col('ID');
   const dateCol = col('Requested Date') || col('Date');
   const svcCol = col('Type') || col('Service');
-
+ 
   const grouped = { new: [], accepted: [], declined: [] };
   records.forEach(r => {
     const status = (statusCol && r[statusCol] || '').trim().toLowerCase();
@@ -1159,14 +1242,14 @@ function render() {
     else if (status === 'accepted' || status === 'paid') grouped.accepted.push(r);
     else grouped.new.push(r);
   });
-
+ 
   const list = document.getElementById('list');
   const items = grouped[currentTab];
   if (!items.length) {
     list.innerHTML = '<div class="empty">Nothing here yet.</div>';
     return;
   }
-
+ 
   list.innerHTML = items.map((r, i) => {
     const realIdx = records.indexOf(r);
     const name = nameCol ? r[nameCol] : 'Unnamed';
@@ -1175,7 +1258,7 @@ function render() {
     const svc = svcCol ? r[svcCol] : '';
     const status = (statusCol && r[statusCol] || '').trim().toLowerCase();
     const isPaid = status === 'paid';
-
+ 
     let actions = '';
     if (currentTab === 'new') {
       actions = '<div class="row">'
@@ -1193,7 +1276,10 @@ function render() {
     } else {
       actions = '<span class="badge declined">✕ Declined</span>';
     }
-
+    actions += '<div class="row" style="margin-top:8px;">'
+      + '<button class="btn remove" onclick="doRemove(' + realIdx + ',this)">🗑 Remove</button>'
+      + '</div>';
+ 
     return '<div class="card">'
       + (id ? '<div class="id">' + esc(id) + '</div>' : '')
       + '<div class="name">' + esc(name || 'Unnamed inquiry') + '</div>'
@@ -1202,11 +1288,30 @@ function render() {
       + '</div>';
   }).join('');
 }
-
+ 
 function esc(s) {
   return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
-
+ 
+async function doRemove(idx, btn) {
+  const idCol = col('ID');
+  const nameCol = col('Name');
+  const id = idCol ? records[idx][idCol] : '';
+  const name = nameCol ? records[idx][nameCol] : 'this inquiry';
+  if (!confirm('Permanently delete ' + (name || 'this inquiry') + ' from the sheet? This cannot be undone.')) return;
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = 'Removing…';
+  try {
+    await api('/api/inquiries/' + encodeURIComponent(id) + '/remove', { method: 'POST' });
+    await load();
+  } catch (e) {
+    alert('Failed: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+ 
 async function doAction(idx, action, btn) {
   const idCol = col('ID');
   const id = idCol ? records[idx][idCol] : '';
@@ -1222,7 +1327,7 @@ async function doAction(idx, action, btn) {
     btn.textContent = original;
   }
 }
-
+ 
 async function doRoute(idx, stage, btn) {
   const idCol = col('ID');
   const id = idCol ? records[idx][idCol] : '';
@@ -1243,10 +1348,11 @@ async function doRoute(idx, stage, btn) {
     btn.textContent = original;
   }
 }
-
+ 
 load();
 </script>
 </body></html>`);
 });
-
+ 
 app.listen(process.env.PORT || 3000, () => console.log(`Server running on port ${process.env.PORT || 3000}`));
+ 
