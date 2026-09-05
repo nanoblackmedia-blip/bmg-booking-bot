@@ -82,6 +82,25 @@ async function confirmBooking(bookingId, opts) {
   return booking;
 }
  
+// Same shape as confirmBooking/declineBooking — the one place that knows
+// what "payment received" means (message the client, stamp the DB), so the
+// desktop app's Mark Paid button and any future WhatsApp path both call
+// this instead of duplicating the message text.
+async function markPaidBooking(bookingId, opts) {
+  opts = opts || {};
+  const pool = await getDB();
+  const [rows] = await pool.query('SELECT * FROM wa_bookings WHERE id = ?', [bookingId]);
+  if (!rows.length) throw bookingNotFoundError();
+  const booking = rows[0];
+  await pool.query('UPDATE wa_bookings SET status = ? WHERE id = ?', ['paid', bookingId]);
+  const ref = `BMG-${String(bookingId).padStart(4, '0')}`;
+  await sendText(booking.phone, `✅ *Payment Received!*\n\nHi ${booking.client_name}, we've received your payment for *${booking.subtype_label}* — reference #${ref}. Thank you! 🎉\n\nYour booking is fully secured. We can't wait to work with you!`);
+  if (opts.notifyAdmin !== false) {
+    await sendText(ADMIN_PHONE, `💰 Booking #BMG-${bookingId} marked paid. Client notified.`);
+  }
+  return booking;
+}
+
 async function declineBooking(bookingId, opts) {
   opts = opts || {};
   const pool = await getDB();
@@ -819,4 +838,25 @@ app.post('/api/inquiries/:id/decline', checkApiSecret, async (req, res) => {
   }
 });
  
+// Same shape as /confirm — this is what the desktop app's "Mark Paid"
+// button calls. Updates wa_bookings, messages the client via
+// markPaidBooking() above, and mirrors the sheet's Status cell.
+app.post('/api/inquiries/:id/paid', checkApiSecret, async (req, res) => {
+  const ref = parseBookingRef(req.params.id);
+  if (!ref) { res.status(400).json({ error: 'Invalid booking id' }); return; }
+  try {
+    const booking = await markPaidBooking(ref.dbId, { notifyAdmin: false });
+    try {
+      await writeSheetStatus(sheetsClient(), ref.sheetId, 'Paid');
+    } catch (e) {
+      console.error('Sheet status write after paid failed:', e.message);
+    }
+    res.json({ ok: true, booking: { id: booking.id, client_name: booking.client_name } });
+  } catch (e) {
+    if (e.code === 'NOT_FOUND') { res.status(404).json({ error: 'Booking not found' }); return; }
+    console.error('POST /api/inquiries/:id/paid error:', e.message);
+    res.status(500).json({ error: 'Failed to mark booking as paid' });
+  }
+});
+
 app.listen(process.env.PORT || 3000, () => console.log(`Server running on port ${process.env.PORT || 3000}`));
