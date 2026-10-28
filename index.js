@@ -65,7 +65,7 @@ function hasValidMobileSession(req) {
 }
  
 const RATE_SHEETS = {
-  sub_md: `${PUBLIC_BASE_URL}/rates/Matric%20Dance%20Rates.pdf`,
+  sub_md: `${PUBLIC_BASE_URL}/rates/Matric%20Dance%20Rates.pdf?v=2`,
 };
  
 const TRAVEL_COSTS_PDF = `${PUBLIC_BASE_URL}/rates/Travel%20Costs.pdf`;
