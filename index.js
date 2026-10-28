@@ -72,10 +72,10 @@ const TRAVEL_COSTS_PDF = `${PUBLIC_BASE_URL}/rates/Travel%20Costs.pdf`;
 const TRAVEL_DISCLAIMER = '📌 *Travel Disclaimer:* These are Fixed travel rates. Final travel cost will be included in the final Quote.';
  
 const PACKAGE_OPTIONS = [
-  { id: 'pkg_entry',    title: 'Entry — R2000',     description: '1 hour · 20 edited images · 3-4 days' },
-  { id: 'pkg_standard', title: 'Standard — R3000',  description: '2 hours · 30 edited images · 3-4 days' },
-  { id: 'pkg_half',     title: 'Half Day — R5000',  description: '4 hours · 50 images · 30s reel · 5-7 days' },
-  { id: 'pkg_full',     title: 'Full Day — R8000',  description: '6 hours · 70 images · 1min reel · 7-10 days' },
+  { id: 'pkg_entry',    title: 'Entry — R2000',     description: '1 hour · 20 edited images · 3-5 business days' },
+  { id: 'pkg_standard', title: 'Standard — R3000',  description: '2 hours · 30 edited images · 5-7 business days' },
+  { id: 'pkg_half',     title: 'Half Day — R5000',  description: '4 hours · 50 images · 30s reel · 7-10 business days' },
+  { id: 'pkg_full',     title: 'Full Day — R8000',  description: '6 hours · 70 images · 1min reel · 10-14 business days' },
 ];
  
 const LOCATION_OPTIONS = [
